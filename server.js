@@ -160,11 +160,11 @@ Quote ONLY exact text from the score. Never invent words. Use [unclear] for ille
 
 For pronunciation: include EVERY unique word from visible lyrics with IPA and English approximation. For straightforward English, set needsGuide to false and words to [].`;
 
-  // Send up to 3 pages — Pro can handle it in 30s
-  const limitedParts = imageParts.length > 3 ? imageParts.slice(0, 3) : imageParts;
+  // Send up to 4 pages — handles title page + 3 pages of music
+  const limitedParts = imageParts.length > 4 ? imageParts.slice(0, 4) : imageParts;
 
   const userParts = [
-    { text: `Analyze this sheet music for the ${part} part. Output ONLY valid JSON.` },
+    { text: `Analyze this sheet music for the ${part} part. Output ONLY valid JSON. NOTE: I am sending ${limitedParts.length} page images. If the first image is a title page or cover page with no musical notation (no staves, no notes), IGNORE it completely and analyze the NEXT image that has actual sheet music.` },
     ...limitedParts,
   ];
 
@@ -250,9 +250,9 @@ m.2: ...
 
 Syllables — Major: Do Re Mi Fa Sol La Ti | Chromatic: Di Ri Fi Si Li (up) Ra Me Se Le Te (down)`;
 
-  const limitedParts = imageParts.length > 3 ? imageParts.slice(0, 3) : imageParts;
+  const limitedParts = imageParts.length > 4 ? imageParts.slice(0, 4) : imageParts;
   const userParts = [
-    { text: `Generate measure-by-measure solfege for the ${part} part. Only include what you can see.` },
+    { text: `Generate measure-by-measure solfege for the ${part} part. Only include what you can see. If any image is a title/cover page with no music, skip it.` },
     ...limitedParts,
   ];
 
@@ -278,9 +278,9 @@ m.X: Count: "1 + 2 + 3 + 4 +" | Notes: [what ${part} sings] | Tips: [tricky spot
 
 Counting: 4/4="1 + 2 + 3 + 4 +" | 3/4="1 + 2 + 3 +" | 6/8="1-la-li 2-la-li"`;
 
-  const limitedParts = imageParts.length > 3 ? imageParts.slice(0, 3) : imageParts;
+  const limitedParts = imageParts.length > 4 ? imageParts.slice(0, 4) : imageParts;
   const userParts = [
-    { text: `Create a rhythm guide for the ${part} part. Only analyze what you can see.` },
+    { text: `Create a rhythm guide for the ${part} part. Only analyze what you can see. If any image is a title/cover page with no music, skip it.` },
     ...limitedParts,
   ];
 
@@ -297,7 +297,7 @@ RULES: Reference actual sheet music in the images. Only cite visible measures/no
 SATB: Soprano=top treble stems up, Alto=bottom treble stems down, Tenor=top bass stems up, Bass=bottom bass stems down.`;
 
   const contents = [];
-  const chatImages = imageParts.length > 2 ? imageParts.slice(0, 2) : imageParts;
+  const chatImages = imageParts.length > 3 ? imageParts.slice(0, 3) : imageParts;
   let attached = false;
 
   if (messages?.length > 0) {
