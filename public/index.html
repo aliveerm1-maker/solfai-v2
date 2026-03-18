@@ -546,7 +546,14 @@
       const directReader = new FileReader();
       directReader.onload = async function(e) {
         // Store raw PDF base64 for direct send
-        const rawPdfBase64 = btoa(String.fromCharCode(...new Uint8Array(e.target.result)));
+        // Convert ArrayBuffer to base64 safely (handles large files)
+        const bytes = new Uint8Array(e.target.result);
+        let binary = '';
+        const chunkSize = 8192;
+        for (let i = 0; i < bytes.length; i += chunkSize) {
+          binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
+        }
+        const rawPdfBase64 = btoa(binary);
         
         // Also render page 1 for preview + fallback
         try {
