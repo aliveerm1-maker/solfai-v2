@@ -135,7 +135,11 @@
     .info-value { font-family: 'Cormorant Garamond', serif; font-size: 1.2rem; font-weight: 600; color: var(--text); line-height: 1.2; }
     .info-edit-input { font-family: 'Cormorant Garamond', serif; font-size: 1rem; font-weight: 600; color: var(--text); background: var(--surface); border: 1px solid var(--gold); border-radius: 6px; padding: 4px 8px; width: 100%; outline: none; }
 
-    .diff-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 20px; }
+    .diff-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; margin-bottom: 20px; }
+    .key-warning { display: inline-flex; align-items: center; gap: 6px; background: rgba(224,92,92,0.08); border: 1px solid rgba(224,92,92,0.25); color: #e07c5c; border-radius: 8px; padding: 6px 12px; font-size: 0.75rem; margin-top: 8px; line-height: 1.4; }
+    .solfege-preview { background: var(--card); border: 1px solid var(--border); border-left: 3px solid var(--violet); border-radius: 12px; padding: 16px 20px; margin-bottom: 12px; font-size: 0.88rem; color: var(--text2); }
+    .solfege-preview-label { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 1.5px; color: var(--muted); margin-bottom: 8px; }
+    .solfege-preview-notes { font-family: 'Cormorant Garamond', serif; font-size: 1.1rem; color: var(--text); letter-spacing: 2px; }
     .diff-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px 12px; text-align: center; }
     .diff-label { font-size: 0.62rem; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-bottom: 8px; }
     .diff-score { font-family: 'Cormorant Garamond', serif; font-size: 1.8rem; font-weight: 700; line-height: 1; }
@@ -369,7 +373,7 @@
   <div class="loading" id="loading">
     <div class="spinner"></div>
     <div class="loading-text">Solfai is reading your music...</div>
-    <div class="loading-sub">This may take 10–20 seconds for complex scores</div>
+    <div class="loading-sub" id="loadingSub">Step 1 of 2: Extracting key, time, starting pitch &amp; notes...</div>
   </div>
 
   <div class="results" id="results">
@@ -419,7 +423,7 @@
     <div id="tab-solfege" class="tab-content">
       <button class="mode-btn" id="solfegeBtn" onclick="loadSolfege()">🎵 Generate Solfege for my part</button>
       <div class="mode-loading" id="solfegeLoading"><div class="mini-spinner"></div> Generating solfege...</div>
-      <div class="mode-output" id="solfegeOutput"></div>
+      <div class="mode-output" id="solfegeOutput" style="white-space:normal;"></div>
     </div>
 
     <div id="tab-rhythm" class="tab-content">
@@ -622,7 +626,17 @@
     showTab('overview', document.querySelector('.tab-btn'));
 
     try {
+      // Show step 1 loading message
+      const loadingSub = document.getElementById('loadingSub');
+      if (loadingSub) loadingSub.textContent = 'Step 1 of 2: Extracting key, time, starting pitch & notes...';
+
+      // Start a timer to switch to step 2 message after ~15s
+      const step2Timer = setTimeout(() => {
+        if (loadingSub) loadingSub.textContent = 'Step 2 of 2: Writing practice guide & composer info...';
+      }, 15000);
+
       const data = await callAPI([], 'analyze');
+      clearTimeout(step2Timer);
 
       // The API returns { structured, text } for analyze mode
       if (data.structured) {
@@ -655,9 +669,9 @@
 
   // ─── Render from structured JSON ────────────────────────
   function renderStructured(s) {
-    // Info cards
+    // Info cards — key card gets warning badge if confidence is low
     const cards = [
-      { label: 'KEY SIGNATURE', value: s.keySignature },
+      { label: 'KEY SIGNATURE', value: s.keySignature, warning: s.keyWarning },
       { label: 'TIME SIGNATURE', value: s.timeSignature },
       { label: 'TEMPO', value: s.tempo },
       { label: 'DYNAMICS', value: s.dynamics },
@@ -669,15 +683,17 @@
         <button class="edit-btn" onclick="editCard(this)">✏️</button>
         <div class="info-label">${escapeHtml(c.label)}</div>
         <div class="info-value">${escapeHtml(c.value)}</div>
+        ${c.warning ? `<div class="key-warning">⚠️ ${escapeHtml(c.warning)}</div>` : ''}
       </div>`).join('');
 
-    // Difficulty
+    // Difficulty — now shows 5 bars (Overall, Rhythm, Range, Intervals, Text/Language)
     const d = s.difficulty || {};
     const diffs = [
       { label: 'OVERALL', value: d.overall },
       { label: 'RHYTHM', value: d.rhythm },
       { label: 'RANGE', value: d.range },
       { label: 'INTERVALS', value: d.intervals },
+      { label: 'LANGUAGE', value: d.text },
     ].filter(x => x.value != null);
 
     document.getElementById('diffGrid').innerHTML = diffs.length ? diffs.map(dd => {
@@ -727,6 +743,20 @@
 
     // Starting Pitch Player
     setupPitchPlayer(s.startingPitch);
+
+    // FIX BUG5: Show solfege preview from first_notes (instant, no extra API call)
+    const solfegeTab = document.getElementById('tab-solfege');
+    if (s.firstNotesSolfege && s.firstNotesSolfege.length > 0) {
+      const previewHtml = `<div class="solfege-preview">
+        <div class="solfege-preview-label">First notes preview (from analysis)</div>
+        <div class="solfege-preview-notes">${escapeHtml(s.firstNotesSolfege.join(' · '))}</div>
+        <div style="font-size:0.75rem;color:var(--muted);margin-top:6px;">Generate full solfege below for all measures with lyrics</div>
+      </div>`;
+      // Insert preview before the generate button
+      const existingPreview = solfegeTab.querySelector('.solfege-preview');
+      if (existingPreview) existingPreview.remove();
+      solfegeTab.insertAdjacentHTML('afterbegin', previewHtml);
+    }
   }
 
   // ─── Pronunciation rendering with TTS ───────────────────
@@ -1269,20 +1299,69 @@
     if (btn) btn.classList.add('active');
   }
 
-  // ─── Solfege ────────────────────────────────────────────
+  // ─── Solfege ──────────────────────────────────────────────
   async function loadSolfege() {
     document.getElementById('solfegeBtn').style.display = 'none';
     document.getElementById('solfegeLoading').classList.add('show');
     try {
       const data = await callAPI([], 'solfege');
       document.getElementById('solfegeLoading').classList.remove('show');
-      document.getElementById('solfegeOutput').textContent = data.text;
-      document.getElementById('solfegeOutput').classList.add('show');
+      // Render solfege as formatted cards instead of raw pre text
+      const outputEl = document.getElementById('solfegeOutput');
+      outputEl.innerHTML = renderSolfegeOutput(data.text);
+      outputEl.classList.add('show');
     } catch {
       document.getElementById('solfegeLoading').classList.remove('show');
       document.getElementById('solfegeOutput').textContent = 'Could not generate solfege. Please try again.';
       document.getElementById('solfegeOutput').classList.add('show');
     }
+  }
+
+  function renderSolfegeOutput(text) {
+    if (!text) return '<p style="color:var(--muted)">No solfege data available.</p>';
+    // Parse the structured text output from server
+    const lines = text.split('\n');
+    let html = '';
+    let inMeasure = false;
+    let measureHtml = '';
+    let measureNum = '';
+
+    const flushMeasure = () => {
+      if (measureHtml) {
+        html += `<div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 18px;margin-bottom:10px;">`;
+        html += `<div style="font-size:0.7rem;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);margin-bottom:8px;">Measure ${escapeHtml(measureNum)}</div>`;
+        html += measureHtml;
+        html += '</div>';
+        measureHtml = '';
+      }
+    };
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+
+      if (trimmed.startsWith('Key:') || trimmed.startsWith('Staff:')) {
+        html += `<div style="font-size:0.85rem;color:var(--gold);margin-bottom:14px;font-weight:500;">${escapeHtml(trimmed)}</div>`;
+      } else if (/^m\.\d+:/.test(trimmed)) {
+        flushMeasure();
+        measureNum = trimmed.replace(/^m\./, '').replace(/:.*/, '');
+        inMeasure = true;
+      } else if (inMeasure && trimmed.startsWith('Notes:')) {
+        measureHtml += `<div style="font-size:0.78rem;color:var(--muted);margin-bottom:2px;">Notes</div>`;
+        measureHtml += `<div style="font-family:'Outfit',monospace;font-size:0.88rem;color:var(--text2);margin-bottom:8px;">${escapeHtml(trimmed.replace('Notes:', '').trim())}</div>`;
+      } else if (inMeasure && trimmed.startsWith('Solfege:')) {
+        measureHtml += `<div style="font-size:0.78rem;color:var(--muted);margin-bottom:2px;">Solfege</div>`;
+        measureHtml += `<div style="font-family:'Cormorant Garamond',serif;font-size:1.1rem;color:var(--text);letter-spacing:2px;margin-bottom:8px;">${escapeHtml(trimmed.replace('Solfege:', '').trim())}</div>`;
+      } else if (inMeasure && trimmed.startsWith('Lyrics:')) {
+        const lyric = trimmed.replace('Lyrics:', '').trim().replace(/^"|"$/g, '');
+        measureHtml += `<div style="font-size:0.78rem;color:var(--muted);margin-bottom:2px;">Lyrics</div>`;
+        measureHtml += `<div style="font-size:0.88rem;color:var(--violet);font-style:italic;">${escapeHtml(lyric)}</div>`;
+      } else if (!inMeasure) {
+        html += `<div style="font-size:0.85rem;color:var(--text2);margin-bottom:6px;">${escapeHtml(trimmed)}</div>`;
+      }
+    }
+    flushMeasure();
+    return html || `<pre style="white-space:pre-wrap;">${escapeHtml(text)}</pre>`;
   }
 
   // ─── Rhythm ─────────────────────────────────────────────
