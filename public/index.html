@@ -533,50 +533,55 @@
     imageMime = file.type || 'image/jpeg';
     if (file.type === 'application/pdf') {
       uploadZone.querySelector('.upload-title').textContent = '⏳ Processing PDF...';
-      uploadZone.querySelector('.upload-sub').textContent = 'Converting pages to high-res images...';
+      uploadZone.querySelector('.upload-sub').textContent = 'Preparing for analysis...';
       analyzeBtn.disabled = true;
       pdfPages = [];
       imageBase64 = null;
-      const reader = new FileReader();
-      reader.onload = async function(e) {
+
+      // T3: Try to send PDF directly first (preserves vector text layer)
+      const directReader = new FileReader();
+      directReader.onload = async function(e) {
+        // Store raw PDF base64 for direct send
+        const rawPdfBase64 = btoa(String.fromCharCode(...new Uint8Array(e.target.result)));
+        
+        // Also render page 1 for preview + fallback
         try {
           const pdfData = new Uint8Array(e.target.result);
           const pdf = await pdfjsLib.getDocument({ data: pdfData }).promise;
-          const totalPages = Math.min(pdf.numPages, 5); // cap at 5 pages to stay under Vercel body limit
+          const totalPages = Math.min(pdf.numPages, 5);
+          
+          // T4: Scale 3.0 for maximum quality + quality 0.92
           for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
             const page = await pdf.getPage(pageNum);
-            // Scale 2.0 = ~144 DPI — good quality for AI reading, keeps payload manageable
-            const viewport = page.getViewport({ scale: 2.0 });
+            const viewport = page.getViewport({ scale: 3.0 });
             const canvas = document.createElement('canvas');
             canvas.width = viewport.width;
             canvas.height = viewport.height;
             const ctx = canvas.getContext('2d');
             await page.render({ canvasContext: ctx, viewport }).promise;
-            // Quality 0.80 keeps ~500-800KB per page in base64
-            const imgData = canvas.toDataURL('image/jpeg', 0.80).split(',')[1];
+            const imgData = canvas.toDataURL('image/jpeg', 0.92).split(',')[1];
             pdfPages.push(imgData);
           }
-          imageMime = 'image/jpeg';
-          imageBase64 = pdfPages[0];
+          
+          // Use raw PDF for sending, JPEG for preview
+          imageBase64 = rawPdfBase64;
+          imageMime = 'application/pdf';
           previewImg.src = 'data:image/jpeg;base64,' + pdfPages[0];
           previewImg.style.display = 'block';
           analyzeBtn.disabled = false;
           uploadZone.querySelector('.upload-title').textContent = '📄 ' + file.name;
-          uploadZone.querySelector('.upload-sub').textContent = `✅ ${totalPages} page${totalPages > 1 ? 's' : ''} ready — high resolution`;
+          uploadZone.querySelector('.upload-sub').textContent = `✅ ${totalPages} page${totalPages > 1 ? 's' : ''} ready — native PDF + high-res preview`;
         } catch(err) {
           console.error('PDF.js error:', err);
-          const reader2 = new FileReader();
-          reader2.onload = ev => {
-            imageBase64 = ev.target.result.split(',')[1];
-            imageMime = 'application/pdf';
-            analyzeBtn.disabled = false;
-            uploadZone.querySelector('.upload-title').textContent = '📄 ' + file.name;
-            uploadZone.querySelector('.upload-sub').textContent = 'PDF ready to analyze';
-          };
-          reader2.readAsDataURL(file);
+          // Fallback: send raw PDF directly
+          imageBase64 = rawPdfBase64;
+          imageMime = 'application/pdf';
+          analyzeBtn.disabled = false;
+          uploadZone.querySelector('.upload-title').textContent = '📄 ' + file.name;
+          uploadZone.querySelector('.upload-sub').textContent = 'PDF ready to analyze';
         }
       };
-      reader.readAsArrayBuffer(file);
+      directReader.readAsArrayBuffer(file);
       return;
     }
     const reader = new FileReader();
@@ -586,12 +591,12 @@
       const img = new Image();
       img.onload = () => {
         const canvas = document.createElement('canvas');
-        const max = 1600; // Good AI readability, keeps payload under ~1.5MB
+        const max = 2400; // T4: Higher resolution for better AI reading
         let w = img.width, h = img.height;
         if (w > max || h > max) { if (w > h) { h = Math.round(h * max / w); w = max; } else { w = Math.round(w * max / h); h = max; } }
         canvas.width = w; canvas.height = h;
         canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-        imageBase64 = canvas.toDataURL('image/jpeg', 0.85).split(',')[1];
+        imageBase64 = canvas.toDataURL('image/jpeg', 0.92).split(',')[1];
         imageMime = 'image/jpeg';
         analyzeBtn.disabled = false;
       };
@@ -1226,6 +1231,7 @@
   function saveCard(btn) {
     const card = btn.closest('.info-card');
     const input = card.querySelector('.info-edit-input');
+    const label = card.querySelector('.info-label')?.textContent?.trim() || '';
     const newVal = input.value.trim() || '—';
     const valueEl = document.createElement('div');
     valueEl.className = 'info-value';
@@ -1233,6 +1239,26 @@
     input.replaceWith(valueEl);
     btn.textContent = '✏️';
     btn.onclick = () => editCard(btn);
+
+    // T9: Save correction to server cache
+    const imgHash = currentAnalysis?._imageHash;
+    if (imgHash && label) {
+      const fieldMap = {
+        'KEY SIGNATURE': 'keySignature',
+        'STARTING PITCH': 'startingPitch',
+        'TIME SIGNATURE': 'timeSignature',
+        'TEMPO': 'tempo',
+        'DYNAMICS': 'dynamics',
+      };
+      const field = fieldMap[label];
+      if (field) {
+        fetch('/api/analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mode: 'correct', imageHash: imgHash, field, value: newVal })
+        }).catch(() => {});
+      }
+    }
   }
 
   // ─── Tabs ───────────────────────────────────────────────
