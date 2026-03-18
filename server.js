@@ -206,8 +206,9 @@ c) Find the first note that has a lyric syllable under it.
 d) What syllable is under that note?
 e) Is the notehead ON a line or IN a space?
 f) Counting from the bottom: which line or space number? (1st, 2nd, 3rd, 4th, 5th)
-g) What clef is this staff in? (treble or bass)
-h) For SATB: Soprano=top treble stems up, Alto=bottom treble stems down, Tenor=top bass stems up, Bass=bottom bass stems down.
+g) What clef is this staff in? (treble, bass, or treble-8 if it has a small 8 below the treble clef)
+h) For SATB: Soprano=top treble stems up, Alto=bottom treble stems down, Tenor=top bass stems up OR treble-8 clef, Bass=bottom bass stems down.
+i) For TB (Tenor-Bass) choir: Tenor=treble-8 clef (treble clef with 8 below) or top voice, Bass=bass clef or bottom voice.
 
 STEP 7 — FIRST FEW NOTES (for ${part}):
 List the first 8-10 note LETTER NAMES of the ${part} vocal line, with octave numbers.
@@ -229,7 +230,7 @@ OUTPUT FORMAT — valid JSON only, no markdown:
     "syllableUnder": "Ly",
     "onLineOrSpace": "space",
     "lineOrSpaceNumber": 2,
-    "clef": "treble",
+    "clef": "treble or bass or treble-8",
     "staveDescription": "2nd space from bottom in treble clef"
   },
   "firstNotes": ["A4", "Bb4", "C5"],
@@ -264,7 +265,7 @@ OUTPUT FORMAT — valid JSON only, no markdown:
 
   // ═══ Phase 3: Calculate starting pitch in CODE ═══
   const pitchData = raw.startingPitchData || {};
-  const startingPitch = calculatePitch(pitchData);
+  const startingPitch = calculatePitch(pitchData, raw.firstNotes);
 
   // ═══ Phase 3: Calculate solfege from note names ═══
   let solfegePreview = '';
@@ -344,16 +345,27 @@ Output ONLY valid JSON.`;
 }
 
 // ─── Calculate pitch from staff position data ─────────────
-function calculatePitch(data) {
-  const { onLineOrSpace, lineOrSpaceNumber, clef, syllableUnder, staveDescription } = data;
-  if (!onLineOrSpace || !lineOrSpaceNumber || !clef) {
-    return data.staveDescription || 'Not determined';
+function calculatePitch(data, firstNotes) {
+  const { onLineOrSpace, lineOrSpaceNumber, clef, syllableUnder, staveDescription } = data || {};
+  
+  // Normalize clef name — handle treble-8, treble8vb, treble_8, etc.
+  const clefNorm = (clef || '').toLowerCase().replace(/[\s\-_]/g, '');
+  const isTreble = clefNorm.startsWith('treble');
+  const isBass = clefNorm.startsWith('bass');
+  const is8vb = clefNorm.includes('8') || clefNorm.includes('8vb') || clefNorm.includes('ottava');
+
+  if (!onLineOrSpace || !lineOrSpaceNumber || (!isTreble && !isBass)) {
+    // Fallback: use firstNotes[0] if available
+    if (firstNotes?.length && firstNotes[0] !== '[?]') {
+      return `${firstNotes[0]}${syllableUnder ? ` (syllable '${syllableUnder}')` : ''}`;
+    }
+    return staveDescription || 'Not determined';
   }
 
   const num = Number(lineOrSpaceNumber);
   let note = null;
 
-  if (clef === 'treble') {
+  if (isTreble) {
     if (onLineOrSpace === 'line') {
       const lines = { 1: 'E4', 2: 'G4', 3: 'B4', 4: 'D5', 5: 'F5' };
       note = lines[num];
@@ -361,7 +373,13 @@ function calculatePitch(data) {
       const spaces = { 1: 'F4', 2: 'A4', 3: 'C5', 4: 'E5' };
       note = spaces[num];
     }
-  } else if (clef === 'bass') {
+    // Treble 8vb (tenor clef) — everything is one octave lower
+    if (is8vb && note) {
+      const letter = note.replace(/\d/, '');
+      const oct = parseInt(note.match(/\d/)[0]) - 1;
+      note = letter + oct;
+    }
+  } else if (isBass) {
     if (onLineOrSpace === 'line') {
       const lines = { 1: 'G2', 2: 'B2', 3: 'D3', 4: 'F3', 5: 'A3' };
       note = lines[num];
@@ -371,9 +389,16 @@ function calculatePitch(data) {
     }
   }
 
-  if (!note) return staveDescription || 'Not determined';
+  if (!note) {
+    // Fallback: use firstNotes[0]
+    if (firstNotes?.length && firstNotes[0] !== '[?]') {
+      return `${firstNotes[0]}${syllableUnder ? ` (syllable '${syllableUnder}')` : ''}`;
+    }
+    return staveDescription || 'Not determined';
+  }
 
-  const desc = `${note} (${ordinal(num)} ${onLineOrSpace} ${clef} clef${syllableUnder ? `, syllable '${syllableUnder}'` : ''})`;
+  const clefLabel = is8vb ? 'treble 8vb clef' : `${isTreble ? 'treble' : 'bass'} clef`;
+  const desc = `${note} (${ordinal(num)} ${onLineOrSpace} ${clefLabel}${syllableUnder ? `, syllable '${syllableUnder}'` : ''})`;
   return desc;
 }
 
