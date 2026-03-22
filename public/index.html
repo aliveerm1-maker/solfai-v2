@@ -294,12 +294,248 @@
       .results { display: block !important; }
       #analyze { padding: 20px; }
     }
+
+    /* ─── PITCH GUIDE TAB ─────────────────── */
+    .pitch-guide-section { display: flex; flex-direction: column; gap: 20px; }
+    .pitch-guide-controls { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+    .btn-mic { display: flex; align-items: center; gap: 10px; padding: 14px 28px; background: linear-gradient(135deg, var(--violet), #6b5fc4); border: none; color: white; font-family: 'Outfit', sans-serif; font-size: 0.95rem; font-weight: 600; border-radius: 14px; cursor: pointer; transition: all 0.2s; }
+    .btn-mic:hover { opacity: 0.9; transform: translateY(-1px); }
+    .btn-mic.active { background: linear-gradient(135deg, var(--error), #c04040); animation: micPulse 1.5s ease-in-out infinite; }
+    @keyframes micPulse { 0%,100%{box-shadow:0 0 0 0 rgba(224,92,92,0.4)} 50%{box-shadow:0 0 0 12px rgba(224,92,92,0)} }
+    .pitch-target-display { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 16px 24px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+    .pitch-target-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1.5px; color: var(--muted); }
+    .pitch-target-note { font-family: 'Cormorant Garamond', serif; font-size: 2rem; font-weight: 700; color: var(--gold); }
+    .pitch-gauge-container { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 24px; display: flex; flex-direction: column; align-items: center; gap: 16px; }
+    .pitch-gauge-title { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 2px; color: var(--muted); }
+    .pitch-needle-wrap { position: relative; width: 280px; height: 160px; }
+    .pitch-gauge-svg { width: 100%; height: 100%; }
+    .pitch-detected-note { font-family: 'Cormorant Garamond', serif; font-size: 2.5rem; font-weight: 700; color: var(--text); text-align: center; }
+    .pitch-cents-display { font-size: 0.9rem; font-weight: 500; text-align: center; }
+    .pitch-cents-display.in-tune { color: var(--success); }
+    .pitch-cents-display.close { color: var(--gold); }
+    .pitch-cents-display.off { color: var(--error); }
+    .pitch-status-text { font-size: 0.8rem; color: var(--muted); text-align: center; }
+    .pitch-history-container { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 20px; }
+    .pitch-history-title { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 2px; color: var(--muted); margin-bottom: 12px; }
+    .pitch-history-canvas { width: 100%; height: 100px; border-radius: 8px; background: var(--surface); display: block; }
+    .pitch-guide-hint { background: var(--card); border: 1px solid var(--border); border-left: 3px solid var(--violet); border-radius: 12px; padding: 16px 20px; font-size: 0.85rem; color: var(--text2); line-height: 1.7; }
+
+    /* ─── VOCAL COACH TAB ─────────────────── */
+    .vocal-coach-section { display: flex; flex-direction: column; gap: 20px; }
+    .record-controls { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+    .btn-record { display: flex; align-items: center; gap: 10px; padding: 14px 28px; background: linear-gradient(135deg, #e05c5c, #c04040); border: none; color: white; font-family: 'Outfit', sans-serif; font-size: 0.95rem; font-weight: 600; border-radius: 14px; cursor: pointer; transition: all 0.2s; }
+    .btn-record:hover:not(:disabled) { opacity: 0.9; transform: translateY(-1px); }
+    .btn-record:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn-record.recording { animation: micPulse 1.5s ease-in-out infinite; }
+    .record-timer { font-family: 'Cormorant Garamond', serif; font-size: 1.5rem; font-weight: 600; color: var(--error); display: none; }
+    .record-timer.show { display: block; }
+    .btn-submit-recording { padding: 14px 28px; background: var(--gold-dim); border: 1px solid rgba(212,168,83,0.3); color: var(--gold); font-family: 'Outfit', sans-serif; font-size: 0.9rem; font-weight: 600; border-radius: 14px; cursor: pointer; transition: all 0.2s; display: none; }
+    .btn-submit-recording.show { display: block; }
+    .btn-submit-recording:hover { background: var(--gold); color: #080810; }
+    .coach-evaluating { display: none; align-items: center; gap: 12px; color: var(--muted); font-size: 0.9rem; padding: 16px; }
+    .coach-evaluating.show { display: flex; }
+    .coach-scores { display: none; }
+    .coach-scores.show { display: block; animation: fadeUp 0.5s forwards; }
+    .coach-score-rings { display: flex; flex-wrap: wrap; gap: 16px; justify-content: center; margin-bottom: 24px; }
+    .score-ring-item { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+    .score-ring-label { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); text-align: center; max-width: 70px; }
+    .score-ring-svg { width: 80px; height: 80px; }
+    .score-ring-num { font-family: 'Cormorant Garamond', serif; font-size: 1.1rem; font-weight: 700; }
+    .coach-feedback-box { background: var(--card); border: 1px solid var(--border); border-left: 3px solid var(--gold); border-radius: 14px; padding: 24px 28px; margin-bottom: 16px; }
+    .coach-feedback-title { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 2px; color: var(--gold); margin-bottom: 12px; }
+    .coach-feedback-text { font-size: 0.9rem; color: var(--text2); line-height: 1.75; font-weight: 300; }
+    .coach-actions { display: flex; flex-direction: column; gap: 10px; }
+    .coach-action-item { background: var(--card); border: 1px solid var(--border); border-left: 3px solid var(--violet); border-radius: 10px; padding: 12px 16px; font-size: 0.88rem; color: var(--text2); display: flex; gap: 12px; align-items: flex-start; }
+    .coach-action-num { color: var(--violet); font-weight: 600; flex-shrink: 0; }
+    .coach-history-list { display: flex; flex-direction: column; gap: 8px; }
+    .coach-history-item { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; transition: border-color 0.2s; }
+    .coach-history-item:hover { border-color: var(--gold); }
+    .coach-history-score { font-family: 'Cormorant Garamond', serif; font-size: 1.3rem; font-weight: 700; color: var(--gold); }
+    .coach-history-date { font-size: 0.75rem; color: var(--muted); }
+
+    /* ─── PRACTICE MODE ─────────────────── */
+    .practice-mode-section { display: flex; flex-direction: column; gap: 20px; }
+    .practice-controls { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+    .btn-practice-start { display: flex; align-items: center; gap: 10px; padding: 14px 28px; background: linear-gradient(135deg, var(--success), #3a9068); border: none; color: #080810; font-family: 'Outfit', sans-serif; font-size: 0.95rem; font-weight: 600; border-radius: 14px; cursor: pointer; transition: all 0.2s; }
+    .btn-practice-start:hover:not(:disabled) { opacity: 0.9; transform: translateY(-1px); }
+    .btn-practice-start:disabled { opacity: 0.4; cursor: not-allowed; }
+    .practice-progress-bar { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 16px 20px; }
+    .progress-bar-label { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+    .progress-bar-text { font-size: 0.8rem; color: var(--text2); }
+    .progress-bar-streak { font-size: 0.8rem; color: var(--gold); font-weight: 600; }
+    .progress-bar-track { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+    .progress-bar-fill { height: 100%; background: linear-gradient(90deg, var(--success), var(--gold)); border-radius: 3px; transition: width 0.5s ease; }
+    .practice-measure-card { background: var(--card); border: 1px solid var(--border); border-radius: 20px; padding: 32px; text-align: center; display: none; }
+    .practice-measure-card.show { display: block; animation: fadeUp 0.4s forwards; }
+    .practice-measure-num { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 2px; color: var(--muted); margin-bottom: 16px; }
+    .practice-solfege-display { font-family: 'Cormorant Garamond', serif; font-size: 2.5rem; font-weight: 700; color: var(--gold); letter-spacing: 4px; margin-bottom: 12px; line-height: 1.2; }
+    .practice-notes-display { font-size: 0.9rem; color: var(--text2); margin-bottom: 8px; font-family: monospace; }
+    .practice-lyrics-display { font-style: italic; color: var(--violet); font-size: 1rem; margin-bottom: 24px; font-family: 'Cormorant Garamond', serif; }
+    .practice-measure-controls { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+    .btn-play-measure { padding: 12px 24px; background: var(--gold-dim); border: 1px solid rgba(212,168,83,0.3); color: var(--gold); font-family: 'Outfit', sans-serif; font-size: 0.9rem; border-radius: 12px; cursor: pointer; transition: all 0.2s; }
+    .btn-play-measure:hover { background: var(--gold); color: #080810; }
+    .btn-next-measure { padding: 12px 24px; background: linear-gradient(135deg, var(--success), #3a9068); border: none; color: #080810; font-family: 'Outfit', sans-serif; font-size: 0.9rem; font-weight: 600; border-radius: 12px; cursor: pointer; transition: all 0.2s; }
+    .btn-next-measure:hover { opacity: 0.9; }
+    .btn-prev-measure { padding: 12px 20px; background: var(--card); border: 1px solid var(--border); color: var(--text2); font-family: 'Outfit', sans-serif; font-size: 0.9rem; border-radius: 12px; cursor: pointer; transition: all 0.2s; }
+    .btn-prev-measure:hover { border-color: var(--muted); }
+    .practice-loading { display: none; text-align: center; padding: 32px; color: var(--text2); font-size: 0.9rem; }
+    .practice-loading.show { display: block; }
+    .confetti-canvas { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 9999; display: none; }
+
+    /* ─── CHEAT SHEET PANEL ─────────────────── */
+    .cheatsheet-panel { position: fixed; top: 0; left: -440px; width: 440px; height: 100vh; background: var(--surface); border-right: 1px solid var(--border); z-index: 200; transition: left 0.35s cubic-bezier(0.4,0,0.2,1); padding: 80px 24px 24px; overflow-y: auto; }
+    .cheatsheet-panel.open { left: 0; }
+    .cheatsheet-title { font-family: 'Cormorant Garamond', serif; font-size: 1.3rem; font-weight: 600; margin-bottom: 20px; color: var(--text); }
+    .cheatsheet-section { margin-bottom: 24px; }
+    .cheatsheet-section-title { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 2px; color: var(--gold); margin-bottom: 12px; }
+    .cheatsheet-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .cheatsheet-item { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; }
+    .cheatsheet-item-title { font-size: 0.8rem; font-weight: 600; color: var(--text); margin-bottom: 2px; }
+    .cheatsheet-item-desc { font-size: 0.72rem; color: var(--text2); line-height: 1.4; }
+    .solfege-hand-signs { display: flex; flex-direction: column; gap: 6px; }
+    .solfege-sign-row { display: flex; align-items: center; gap: 12px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; }
+    .solfege-syllable { font-family: 'Cormorant Garamond', serif; font-size: 1.1rem; font-weight: 700; color: var(--gold); min-width: 30px; }
+    .solfege-hand { font-size: 0.78rem; color: var(--text2); }
+    .ipa-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+    .ipa-item { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 8px; text-align: center; }
+    .ipa-symbol { font-size: 1rem; color: var(--violet); font-style: italic; }
+    .ipa-desc { font-size: 0.68rem; color: var(--muted); }
+
+    /* ─── KEYBOARD SHORTCUTS OVERLAY ─────────── */
+    .shortcuts-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 2000; display: none; align-items: center; justify-content: center; backdrop-filter: blur(8px); }
+    .shortcuts-overlay.show { display: flex; }
+    .shortcuts-box { background: var(--surface); border: 1px solid var(--border); border-radius: 20px; padding: 36px 40px; max-width: 480px; width: 90%; }
+    .shortcuts-title { font-family: 'Cormorant Garamond', serif; font-size: 1.4rem; font-weight: 700; color: var(--text); margin-bottom: 24px; text-align: center; }
+    .shortcuts-grid { display: flex; flex-direction: column; gap: 10px; }
+    .shortcut-row { display: flex; justify-content: space-between; align-items: center; }
+    .shortcut-key { background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; font-family: monospace; font-size: 0.85rem; color: var(--gold); min-width: 40px; text-align: center; }
+    .shortcut-desc { font-size: 0.88rem; color: var(--text2); }
+
+    /* ─── CONFIDENCE BADGE ─────────────────── */
+    .confidence-badge { display: inline-flex; align-items: center; gap: 5px; font-size: 0.7rem; padding: 3px 10px; border-radius: 20px; margin-top: 6px; }
+    .confidence-badge.high { background: rgba(82,183,136,0.12); border: 1px solid rgba(82,183,136,0.3); color: var(--success); }
+    .confidence-badge.low { background: rgba(224,92,92,0.08); border: 1px solid rgba(224,92,92,0.25); color: var(--error); }
+    .confidence-badge.medium { background: rgba(212,168,83,0.1); border: 1px solid rgba(212,168,83,0.25); color: var(--gold); }
+
+    /* ─── DIFF BAR ANIMATION ─────────────────── */
+    .diff-fill { width: 0 !important; transition: width 1.2s cubic-bezier(0.4, 0, 0.2, 1) !important; }
+    .diff-fill.animated { width: var(--target-width) !important; }
+
+    /* ─── INFO CARD ENTRANCE ANIMATION ─────── */
+    .info-card { opacity: 0; transform: translateY(12px); }
+    .info-card.visible { opacity: 1; transform: translateY(0); transition: opacity 0.4s ease, transform 0.4s ease; }
+
+    /* ─── PRACTICE TIMER DASHBOARD ─────────── */
+    .practice-timer-section { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 20px 24px; }
+    .practice-timer-title { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 2px; color: var(--muted); margin-bottom: 12px; }
+    .practice-timer-stats { display: flex; gap: 24px; flex-wrap: wrap; }
+    .timer-stat { display: flex; flex-direction: column; gap: 4px; }
+    .timer-stat-value { font-family: 'Cormorant Garamond', serif; font-size: 1.6rem; font-weight: 700; color: var(--gold); line-height: 1; }
+    .timer-stat-label { font-size: 0.72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }
+
+    @media (max-width: 600px) {
+      .pitch-needle-wrap { width: 220px; height: 130px; }
+      .practice-solfege-display { font-size: 1.8rem; }
+      .coach-score-rings { gap: 10px; }
+      .score-ring-svg { width: 64px; height: 64px; }
+    }
   </style>
 </head>
 <body>
 
 <div class="blob blob-1"></div>
 <div class="blob blob-2"></div>
+
+<!-- Keyboard shortcuts overlay -->
+<div class="shortcuts-overlay" id="shortcutsOverlay" onclick="closeShortcuts()">
+  <div class="shortcuts-box" onclick="event.stopPropagation()">
+    <div class="shortcuts-title">⌨ Keyboard Shortcuts</div>
+    <div class="shortcuts-grid">
+      <div class="shortcut-row"><span class="shortcut-key">?</span><span class="shortcut-desc">Show this help</span></div>
+      <div class="shortcut-row"><span class="shortcut-key">M</span><span class="shortcut-desc">Toggle mic / pitch detection</span></div>
+      <div class="shortcut-row"><span class="shortcut-key">R</span><span class="shortcut-desc">Start / stop recording</span></div>
+      <div class="shortcut-row"><span class="shortcut-key">Space</span><span class="shortcut-desc">Play starting pitch</span></div>
+      <div class="shortcut-row"><span class="shortcut-key">←</span><span class="shortcut-desc">Previous measure (practice mode)</span></div>
+      <div class="shortcut-row"><span class="shortcut-key">→</span><span class="shortcut-desc">Next measure (practice mode)</span></div>
+      <div class="shortcut-row"><span class="shortcut-key">1-6</span><span class="shortcut-desc">Switch to tab (Overview–Pronunciation)</span></div>
+      <div class="shortcut-row"><span class="shortcut-key">7</span><span class="shortcut-desc">Pitch Guide tab</span></div>
+      <div class="shortcut-row"><span class="shortcut-key">8</span><span class="shortcut-desc">Vocal Coach tab</span></div>
+      <div class="shortcut-row"><span class="shortcut-key">9</span><span class="shortcut-desc">Practice Mode tab</span></div>
+      <div class="shortcut-row"><span class="shortcut-key">Esc</span><span class="shortcut-desc">Close this overlay</span></div>
+    </div>
+    <div style="text-align:center;margin-top:20px;font-size:0.8rem;color:var(--muted)">Click anywhere outside to close</div>
+  </div>
+</div>
+
+<!-- Cheat sheet panel -->
+<div class="history-overlay" id="cheatsheetOverlay" onclick="closeCheatsheet()"></div>
+<div class="cheatsheet-panel" id="cheatsheetPanel">
+  <button class="close-btn" onclick="closeCheatsheet()">✕</button>
+  <div class="cheatsheet-title">📖 Choir Quick Reference</div>
+
+  <div class="cheatsheet-section">
+    <div class="cheatsheet-section-title">Solfege Hand Signs</div>
+    <div class="solfege-hand-signs">
+      <div class="solfege-sign-row"><span class="solfege-syllable">Do</span><span class="solfege-hand">Fist pointing down, thumb tucked · Low, stable, home</span></div>
+      <div class="solfege-sign-row"><span class="solfege-syllable">Re</span><span class="solfege-hand">Flat hand tilted down · 2nd degree, tension</span></div>
+      <div class="solfege-sign-row"><span class="solfege-syllable">Mi</span><span class="solfege-hand">Flat hand level, palm down · Stable, resting point</span></div>
+      <div class="solfege-sign-row"><span class="solfege-syllable">Fa</span><span class="solfege-hand">Thumb pointing down, fingers out · Tension, pull down</span></div>
+      <div class="solfege-sign-row"><span class="solfege-syllable">Sol</span><span class="solfege-hand">Open hand, palm down, fingers spread · Strong, open</span></div>
+      <div class="solfege-sign-row"><span class="solfege-syllable">La</span><span class="solfege-hand">Hand on shoulder, fingers pointing out · Relaxed</span></div>
+      <div class="solfege-sign-row"><span class="solfege-syllable">Ti</span><span class="solfege-hand">Pointing finger upward · Rising tension</span></div>
+      <div class="solfege-sign-row"><span class="solfege-syllable">Do'</span><span class="solfege-hand">Fist pointing up · High, resolved</span></div>
+    </div>
+  </div>
+
+  <div class="cheatsheet-section">
+    <div class="cheatsheet-section-title">Interval Reference Songs</div>
+    <div class="cheatsheet-grid">
+      <div class="cheatsheet-item"><div class="cheatsheet-item-title">Minor 2nd (½ step)</div><div class="cheatsheet-item-desc">Jaws theme · "da-DUM"</div></div>
+      <div class="cheatsheet-item"><div class="cheatsheet-item-title">Major 2nd (whole step)</div><div class="cheatsheet-item-desc">Happy Birthday (first 2 notes)</div></div>
+      <div class="cheatsheet-item"><div class="cheatsheet-item-title">Minor 3rd</div><div class="cheatsheet-item-desc">Smoke on the Water · "hey you"</div></div>
+      <div class="cheatsheet-item"><div class="cheatsheet-item-title">Major 3rd</div><div class="cheatsheet-item-desc">When the Saints Go Marching In</div></div>
+      <div class="cheatsheet-item"><div class="cheatsheet-item-title">Perfect 4th</div><div class="cheatsheet-item-desc">Here Comes the Bride · Amazing Grace</div></div>
+      <div class="cheatsheet-item"><div class="cheatsheet-item-title">Tritone (aug 4th)</div><div class="cheatsheet-item-desc">The Simpsons theme · Maria (West Side)</div></div>
+      <div class="cheatsheet-item"><div class="cheatsheet-item-title">Perfect 5th</div><div class="cheatsheet-item-desc">Twinkle Twinkle Little Star</div></div>
+      <div class="cheatsheet-item"><div class="cheatsheet-item-title">Major 6th</div><div class="cheatsheet-item-desc">My Bonnie Lies Over the Ocean</div></div>
+      <div class="cheatsheet-item"><div class="cheatsheet-item-title">Minor 7th</div><div class="cheatsheet-item-desc">Somewhere (West Side Story)</div></div>
+      <div class="cheatsheet-item"><div class="cheatsheet-item-title">Octave</div><div class="cheatsheet-item-desc">Somewhere Over the Rainbow</div></div>
+    </div>
+  </div>
+
+  <div class="cheatsheet-section">
+    <div class="cheatsheet-section-title">Beat Counting Guide</div>
+    <div class="cheatsheet-grid">
+      <div class="cheatsheet-item"><div class="cheatsheet-item-title">4/4 time</div><div class="cheatsheet-item-desc">1 + 2 + 3 + 4 +<br/>Quarter note = 1 beat</div></div>
+      <div class="cheatsheet-item"><div class="cheatsheet-item-title">3/4 time</div><div class="cheatsheet-item-desc">1 + 2 + 3 +<br/>Waltz feel, 3 beats</div></div>
+      <div class="cheatsheet-item"><div class="cheatsheet-item-title">6/8 time</div><div class="cheatsheet-item-desc">1-la-li 2-la-li<br/>2 dotted quarter beats</div></div>
+      <div class="cheatsheet-item"><div class="cheatsheet-item-title">Cut time (2/2)</div><div class="cheatsheet-item-desc">1 + 2 +<br/>Half note = 1 beat</div></div>
+      <div class="cheatsheet-item"><div class="cheatsheet-item-title">4/8 time</div><div class="cheatsheet-item-desc">1-e-+ 2-e-+<br/>8th note = 1 beat</div></div>
+      <div class="cheatsheet-item"><div class="cheatsheet-item-title">5/4 time</div><div class="cheatsheet-item-desc">1+2+3+4+5 or (3+2) / (2+3)</div></div>
+    </div>
+  </div>
+
+  <div class="cheatsheet-section">
+    <div class="cheatsheet-section-title">IPA Vowels Quick Reference</div>
+    <div class="ipa-grid">
+      <div class="ipa-item"><div class="ipa-symbol">/aː/</div><div class="ipa-desc">Latin A · "father"</div></div>
+      <div class="ipa-item"><div class="ipa-symbol">/ɛ/</div><div class="ipa-desc">Open E · "bed"</div></div>
+      <div class="ipa-item"><div class="ipa-symbol">/iː/</div><div class="ipa-desc">Closed I · "see"</div></div>
+      <div class="ipa-item"><div class="ipa-symbol">/oː/</div><div class="ipa-desc">Closed O · "go"</div></div>
+      <div class="ipa-item"><div class="ipa-symbol">/uː/</div><div class="ipa-desc">Closed U · "moon"</div></div>
+      <div class="ipa-item"><div class="ipa-symbol">/ø/</div><div class="ipa-desc">German Ö · lips for O, say E</div></div>
+      <div class="ipa-item"><div class="ipa-symbol">/y/</div><div class="ipa-desc">German Ü · lips for O, say I</div></div>
+      <div class="ipa-item"><div class="ipa-symbol">/ɔ/</div><div class="ipa-desc">Open O · "law"</div></div>
+      <div class="ipa-item"><div class="ipa-symbol">/œ/</div><div class="ipa-desc">French EU · "her"</div></div>
+    </div>
+  </div>
+
+  <div class="cheatsheet-section">
+    <div class="cheatsheet-section-title">Treble Clef Reference</div>
+    <div class="cheatsheet-item" style="margin-bottom:8px"><div class="cheatsheet-item-title">Lines (bottom → top)</div><div class="cheatsheet-item-desc">E4 · G4 · B4 · D5 · F5 (Every Good Boy Does Fine)</div></div>
+    <div class="cheatsheet-item"><div class="cheatsheet-item-title">Spaces (bottom → top)</div><div class="cheatsheet-item-desc">F4 · A4 · C5 · E5 (FACE)</div></div>
+  </div>
+</div>
 
 <div class="history-overlay" id="historyOverlay" onclick="closeHistory()"></div>
 <div class="history-panel" id="historyPanel">
@@ -318,7 +554,9 @@
   </ul>
   <div class="nav-right">
     <button class="icon-btn" onclick="toggleTheme()" id="themeBtn" title="Toggle theme">🌙</button>
+    <button class="icon-btn" onclick="openCheatsheet()" title="Quick Reference">📖</button>
     <button class="icon-btn" onclick="openHistory()" title="History">📚</button>
+    <button class="icon-btn" onclick="showShortcuts()" title="Keyboard shortcuts (?)">⌨</button>
   </div>
 </nav>
 
@@ -407,13 +645,16 @@
       </div>
     </div>
 
-    <div class="tab-bar">
-      <button class="tab-btn active" onclick="showTab('overview', this)">Overview</button>
-      <button class="tab-btn" onclick="showTab('solfege', this)">🎵 Solfege</button>
-      <button class="tab-btn" onclick="showTab('rhythm', this)">🥁 Rhythm</button>
-      <button class="tab-btn" onclick="showTab('practice', this)">💡 Practice Tips</button>
-      <button class="tab-btn" onclick="showTab('composer', this)">🎼 Composer</button>
-      <button class="tab-btn" onclick="showTab('pronunciation', this)">🗣 Pronunciation</button>
+    <div class="tab-bar" id="mainTabBar">
+      <button class="tab-btn active" onclick="showTab('overview', this)" data-tab-index="1">Overview</button>
+      <button class="tab-btn" onclick="showTab('solfege', this)" data-tab-index="2">🎵 Solfege</button>
+      <button class="tab-btn" onclick="showTab('rhythm', this)" data-tab-index="3">🥁 Rhythm</button>
+      <button class="tab-btn" onclick="showTab('practice', this)" data-tab-index="4">💡 Practice Tips</button>
+      <button class="tab-btn" onclick="showTab('composer', this)" data-tab-index="5">🎼 Composer</button>
+      <button class="tab-btn" onclick="showTab('pronunciation', this)" data-tab-index="6">🗣 Pronunciation</button>
+      <button class="tab-btn" onclick="showTab('pitchguide', this)" data-tab-index="7">🎤 Pitch Guide</button>
+      <button class="tab-btn" onclick="showTab('vocalcoach', this)" data-tab-index="8">🎙 Vocal Coach</button>
+      <button class="tab-btn" onclick="showTab('practicemode', this)" data-tab-index="9">🎯 Practice Mode</button>
     </div>
 
     <div id="tab-overview" class="tab-content active">
@@ -442,6 +683,146 @@
 
     <div id="tab-pronunciation" class="tab-content">
       <div id="pronunciationBox"></div>
+    </div>
+
+    <!-- PITCH GUIDE TAB -->
+    <div id="tab-pitchguide" class="tab-content">
+      <div class="pitch-guide-section">
+        <div class="pitch-guide-hint">
+          🎤 <strong>Real-time pitch detection.</strong> Click <em>Start Listening</em>, sing your starting note, and see how close you are. Green = in tune (±15 cents), Yellow = close (±30 cents), Red = off (>30 cents).
+          <br/><span style="color:var(--muted);font-size:0.8rem;">Requires microphone permission. Works best in a quiet room.</span>
+        </div>
+        <div class="pitch-guide-controls">
+          <button class="btn-mic" id="btnStartPitchDetect" onclick="togglePitchDetection()">
+            <span id="micBtnIcon">🎤</span> <span id="micBtnText">Start Listening</span>
+          </button>
+          <div class="pitch-target-display" id="pitchTargetDisplay" style="display:none">
+            <div>
+              <div class="pitch-target-label">Target Note</div>
+              <div class="pitch-target-note" id="pitchTargetNote">—</div>
+            </div>
+            <div style="color:var(--border);font-size:1.5rem;">|</div>
+            <div>
+              <div class="pitch-target-label">Your Note</div>
+              <div class="pitch-target-note" id="pitchDetectedNote" style="color:var(--text)">—</div>
+            </div>
+          </div>
+        </div>
+        <div class="pitch-gauge-container" id="pitchGaugeContainer">
+          <div class="pitch-gauge-title">Pitch Accuracy Meter</div>
+          <div class="pitch-needle-wrap">
+            <svg class="pitch-gauge-svg" id="pitchGaugeSvg" viewBox="0 0 280 160">
+              <!-- Background arc -->
+              <path d="M 20 145 A 120 120 0 0 1 260 145" fill="none" stroke="#252535" stroke-width="18" stroke-linecap="round"/>
+              <!-- Red zones -->
+              <path d="M 20 145 A 120 120 0 0 1 62 52" fill="none" stroke="rgba(224,92,92,0.4)" stroke-width="18" stroke-linecap="round"/>
+              <path d="M 218 52 A 120 120 0 0 1 260 145" fill="none" stroke="rgba(224,92,92,0.4)" stroke-width="18" stroke-linecap="round"/>
+              <!-- Yellow zones -->
+              <path d="M 62 52 A 120 120 0 0 1 95 22" fill="none" stroke="rgba(212,168,83,0.4)" stroke-width="18" stroke-linecap="round"/>
+              <path d="M 185 22 A 120 120 0 0 1 218 52" fill="none" stroke="rgba(212,168,83,0.4)" stroke-width="18" stroke-linecap="round"/>
+              <!-- Green zone -->
+              <path d="M 95 22 A 120 120 0 0 1 185 22" fill="none" stroke="rgba(82,183,136,0.5)" stroke-width="18" stroke-linecap="round"/>
+              <!-- Center mark -->
+              <line x1="140" y1="25" x2="140" y2="38" stroke="#52b788" stroke-width="3" stroke-linecap="round"/>
+              <!-- Labels -->
+              <text x="16" y="162" font-size="11" fill="#585668" text-anchor="middle">-50</text>
+              <text x="264" y="162" font-size="11" fill="#585668" text-anchor="middle">+50</text>
+              <text x="140" y="158" font-size="11" fill="#52b788" text-anchor="middle">0</text>
+              <!-- Needle -->
+              <line id="pitchNeedle" x1="140" y1="140" x2="140" y2="30" stroke="#d4a853" stroke-width="3" stroke-linecap="round" transform-origin="140 140" transform="rotate(0, 140, 140)"/>
+              <circle cx="140" cy="140" r="6" fill="#d4a853"/>
+            </svg>
+          </div>
+          <div class="pitch-detected-note" id="pitchNoteDisplay">—</div>
+          <div class="pitch-cents-display" id="pitchCentsDisplay">Waiting for input...</div>
+          <div class="pitch-status-text" id="pitchStatusText">Start listening to detect your pitch</div>
+        </div>
+        <div class="pitch-history-container">
+          <div class="pitch-history-title">Pitch History (last 10 seconds)</div>
+          <canvas class="pitch-history-canvas" id="pitchHistoryCanvas" width="600" height="100"></canvas>
+        </div>
+        <div class="practice-timer-section">
+          <div class="practice-timer-title">Session Stats</div>
+          <div class="practice-timer-stats">
+            <div class="timer-stat"><div class="timer-stat-value" id="pitchSessionTime">0:00</div><div class="timer-stat-label">Time Listening</div></div>
+            <div class="timer-stat"><div class="timer-stat-value" id="pitchAccuracyAvg">—</div><div class="timer-stat-label">Avg Accuracy</div></div>
+            <div class="timer-stat"><div class="timer-stat-value" id="pitchBestStreak">0</div><div class="timer-stat-label">Best Streak</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- VOCAL COACH TAB -->
+    <div id="tab-vocalcoach" class="tab-content">
+      <div class="vocal-coach-section">
+        <div class="pitch-guide-hint">
+          🎙 <strong>Director Audio Feedback.</strong> Record yourself singing your part, then get detailed feedback from Solfai acting as a professional choir director. Works best with 5-30 seconds of singing.
+        </div>
+        <div class="record-controls">
+          <button class="btn-record" id="btnStartRecord" onclick="toggleRecording()">
+            <span id="recordBtnIcon">⏺</span> <span id="recordBtnText">Start Recording</span>
+          </button>
+          <div class="record-timer" id="recordTimer">0:00</div>
+          <button class="btn-submit-recording" id="btnSubmitRecording" onclick="submitRecording()">
+            ✨ Get Director Feedback
+          </button>
+        </div>
+        <div class="coach-evaluating" id="coachEvaluating">
+          <div class="mini-spinner" style="border-top-color:var(--gold)"></div>
+          <span>Solfai is listening to your performance...</span>
+        </div>
+        <div class="coach-scores" id="coachScores">
+          <div class="coach-score-rings" id="coachScoreRings"></div>
+          <div class="coach-feedback-box">
+            <div class="coach-feedback-title">Director's Feedback</div>
+            <div class="coach-feedback-text" id="coachFeedbackText"></div>
+          </div>
+          <div class="coach-feedback-title" style="font-size:0.7rem;text-transform:uppercase;letter-spacing:2px;color:var(--violet);margin-bottom:10px;">Action Items</div>
+          <div class="coach-actions" id="coachActions"></div>
+        </div>
+        <div id="coachHistorySection" style="display:none">
+          <div style="font-size:0.7rem;text-transform:uppercase;letter-spacing:2px;color:var(--muted);margin-bottom:12px;margin-top:20px;">Past Recordings</div>
+          <div class="coach-history-list" id="coachHistoryList"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PRACTICE MODE TAB -->
+    <div id="tab-practicemode" class="tab-content">
+      <div class="practice-mode-section">
+        <div class="pitch-guide-hint">
+          🎯 <strong>Practice Mode.</strong> Work through your part measure by measure. Play each measure, then practice it yourself. Navigate with arrow keys or buttons. Load solfege first in the Solfege tab.
+        </div>
+        <div class="practice-controls">
+          <button class="btn-practice-start" id="btnStartPractice" onclick="startPracticeMode()" disabled>
+            ▶ Start Practice Mode
+          </button>
+          <div id="practiceLoadHint" style="font-size:0.82rem;color:var(--muted)">Generate Solfege first (Solfege tab), then return here.</div>
+        </div>
+        <div class="practice-progress-bar" id="practiceProgressBar" style="display:none">
+          <div class="progress-bar-label">
+            <span class="progress-bar-text" id="practiceProgressText">Measure 1 of 1</span>
+            <span class="progress-bar-streak" id="practiceStreakText">🔥 0 streak</span>
+          </div>
+          <div class="progress-bar-track"><div class="progress-bar-fill" id="practiceProgressFill" style="width:0%"></div></div>
+        </div>
+        <div class="practice-loading" id="practiceLoading">
+          <div class="mini-spinner" style="border-top-color:var(--gold);width:24px;height:24px;border-width:3px;margin:0 auto 12px"></div>
+          Loading solfege data...
+        </div>
+        <div class="practice-measure-card" id="practiceMeasureCard">
+          <div class="practice-measure-num" id="practiceMeasureNum">Measure 1</div>
+          <div class="practice-solfege-display" id="practiceSolfegeDisplay">Do Re Mi</div>
+          <div class="practice-notes-display" id="practiceNotesDisplay"></div>
+          <div class="practice-lyrics-display" id="practiceLyricsDisplay"></div>
+          <div class="practice-measure-controls">
+            <button class="btn-prev-measure" id="btnPrevMeasure" onclick="prevMeasure()">← Prev</button>
+            <button class="btn-play-measure" onclick="playCurrentMeasure()">🎹 Play Notes</button>
+            <button class="btn-next-measure" id="btnNextMeasure" onclick="nextMeasure()">Next →</button>
+          </div>
+        </div>
+        <canvas id="confettiCanvas" class="confetti-canvas"></canvas>
+      </div>
     </div>
   </div>
 
@@ -1534,6 +1915,687 @@
   function closeHistory() { document.getElementById('historyPanel').classList.remove('open'); document.getElementById('historyOverlay').classList.remove('show'); }
 
   renderHistory();
+</script>
+
+<!-- ─── NEW FEATURES SCRIPT ─────────────────────────────── -->
+<script>
+// ════════════════════════════════════════════════════════════
+// KEYBOARD SHORTCUTS
+// ════════════════════════════════════════════════════════════
+function showShortcuts() { document.getElementById('shortcutsOverlay').classList.add('show'); }
+function closeShortcuts() { document.getElementById('shortcutsOverlay').classList.remove('show'); }
+
+document.addEventListener('keydown', (e) => {
+  const tag = document.activeElement.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+
+  const key = e.key;
+  if (key === '?') { e.preventDefault(); showShortcuts(); return; }
+  if (key === 'Escape') { closeShortcuts(); closeCheatsheet(); return; }
+
+  // Tab switching via number keys (only when results shown)
+  if (!document.getElementById('results').classList.contains('show')) return;
+
+  if (key >= '1' && key <= '9') {
+    e.preventDefault();
+    const idx = parseInt(key);
+    const btns = document.querySelectorAll('#mainTabBar .tab-btn');
+    if (btns[idx - 1]) btns[idx - 1].click();
+    return;
+  }
+
+  if (key === ' ') { e.preventDefault(); if (window._startingPitchFreq) playStartingPitch(); return; }
+  if (key === 'm' || key === 'M') { e.preventDefault(); togglePitchDetection(); return; }
+  if (key === 'r' || key === 'R') { e.preventDefault(); toggleRecording(); return; }
+  if (key === 'ArrowLeft') { e.preventDefault(); prevMeasure(); return; }
+  if (key === 'ArrowRight') { e.preventDefault(); nextMeasure(); return; }
+});
+
+// ════════════════════════════════════════════════════════════
+// CHEAT SHEET
+// ════════════════════════════════════════════════════════════
+function openCheatsheet() {
+  document.getElementById('cheatsheetPanel').classList.add('open');
+  document.getElementById('cheatsheetOverlay').classList.add('show');
+}
+function closeCheatsheet() {
+  document.getElementById('cheatsheetPanel').classList.remove('open');
+  document.getElementById('cheatsheetOverlay').classList.remove('show');
+}
+
+// ════════════════════════════════════════════════════════════
+// ANIMATED DIFF BARS & CARD ENTRANCE
+// ════════════════════════════════════════════════════════════
+function animateDiffBars() {
+  document.querySelectorAll('.diff-fill').forEach(el => {
+    const width = el.style.width;
+    if (width && width !== '0%') {
+      el.style.setProperty('--target-width', width);
+      el.style.width = '0%';
+      requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('animated')));
+    }
+  });
+}
+
+function animateInfoCards() {
+  document.querySelectorAll('.info-card').forEach((card, i) => {
+    card.style.transitionDelay = `${i * 60}ms`;
+    setTimeout(() => card.classList.add('visible'), 50 + i * 60);
+  });
+}
+
+// Hook into renderStructured
+const _origRenderStructured = window.renderStructured;
+
+// ════════════════════════════════════════════════════════════
+// REAL-TIME PITCH DETECTION (Autocorrelation)
+// ════════════════════════════════════════════════════════════
+let pitchDetectActive = false;
+let pitchAudioCtx = null;
+let pitchAnalyser = null;
+let pitchStream = null;
+let pitchAnimFrame = null;
+let pitchHistory = []; // Array of {cents, time}
+let pitchSessionStartTime = null;
+let pitchInTuneStreak = 0;
+let pitchBestStreak = 0;
+let pitchAccuracySamples = [];
+
+const NOTE_STRINGS = ['C','C♯','D','E♭','E','F','F♯','G','A♭','A','B♭','B'];
+
+function freqToMidi(freq) { return 69 + 12 * Math.log2(freq / 440); }
+function freqToNoteAndCents(freq) {
+  if (!freq || freq < 50) return null;
+  const midi = freqToMidi(freq);
+  const roundedMidi = Math.round(midi);
+  const cents = Math.round((midi - roundedMidi) * 100);
+  const octave = Math.floor(roundedMidi / 12) - 1;
+  const noteName = NOTE_STRINGS[roundedMidi % 12];
+  return { noteName, octave, cents, midi: roundedMidi };
+}
+
+function autocorrelationPitch(buffer, sampleRate) {
+  const SIZE = buffer.length;
+  const MAX_SAMPLES = Math.floor(SIZE / 2);
+  let bestOffset = -1;
+  let bestCorrelation = 0;
+  let rms = 0;
+  let foundGoodCorrelation = false;
+  let correlations = new Array(MAX_SAMPLES);
+
+  for (let i = 0; i < SIZE; i++) rms += buffer[i] * buffer[i];
+  rms = Math.sqrt(rms / SIZE);
+  if (rms < 0.01) return -1; // Too quiet
+
+  let lastCorrelation = 1;
+  for (let offset = 0; offset < MAX_SAMPLES; offset++) {
+    let correlation = 0;
+    for (let i = 0; i < MAX_SAMPLES; i++) {
+      correlation += Math.abs(buffer[i] - buffer[i + offset]);
+    }
+    correlation = 1 - (correlation / MAX_SAMPLES);
+    correlations[offset] = correlation;
+    if (correlation > 0.9 && correlation > lastCorrelation) {
+      foundGoodCorrelation = true;
+      if (correlation > bestCorrelation) {
+        bestCorrelation = correlation;
+        bestOffset = offset;
+      }
+    } else if (foundGoodCorrelation) {
+      // Parabolic interpolation for sub-sample accuracy
+      const shift = (correlations[bestOffset + 1] - correlations[bestOffset - 1]) /
+                    (2 * (2 * correlations[bestOffset] - correlations[bestOffset - 1] - correlations[bestOffset + 1]));
+      return sampleRate / (bestOffset + shift);
+    }
+    lastCorrelation = correlation;
+  }
+  if (bestCorrelation > 0.01) return sampleRate / bestOffset;
+  return -1;
+}
+
+async function togglePitchDetection() {
+  if (pitchDetectActive) {
+    stopPitchDetection();
+  } else {
+    await startPitchDetection();
+  }
+}
+
+async function startPitchDetection() {
+  try {
+    pitchStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true }, video: false });
+    pitchAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    pitchAnalyser = pitchAudioCtx.createAnalyser();
+    pitchAnalyser.fftSize = 2048;
+    pitchAnalyser.smoothingTimeConstant = 0.8;
+    const source = pitchAudioCtx.createMediaStreamSource(pitchStream);
+    source.connect(pitchAnalyser);
+
+    pitchDetectActive = true;
+    pitchSessionStartTime = Date.now();
+    pitchHistory = [];
+    pitchInTuneStreak = 0;
+    pitchBestStreak = 0;
+    pitchAccuracySamples = [];
+
+    const btn = document.getElementById('btnStartPitchDetect');
+    btn.classList.add('active');
+    document.getElementById('micBtnIcon').textContent = '🔴';
+    document.getElementById('micBtnText').textContent = 'Stop Listening';
+    document.getElementById('pitchTargetDisplay').style.display = 'flex';
+
+    // Set target note from current analysis
+    const targetPitch = window.currentAnalysis?.startingPitch;
+    document.getElementById('pitchTargetNote').textContent = targetPitch || '—';
+
+    updatePitchLoop();
+    updatePitchSessionTimer();
+  } catch (err) {
+    alert('Microphone access denied. Please allow microphone access in your browser settings.');
+  }
+}
+
+function stopPitchDetection() {
+  pitchDetectActive = false;
+  if (pitchAnimFrame) cancelAnimationFrame(pitchAnimFrame);
+  if (pitchStream) pitchStream.getTracks().forEach(t => t.stop());
+  if (pitchAudioCtx) { pitchAudioCtx.close(); pitchAudioCtx = null; }
+
+  const btn = document.getElementById('btnStartPitchDetect');
+  btn.classList.remove('active');
+  document.getElementById('micBtnIcon').textContent = '🎤';
+  document.getElementById('micBtnText').textContent = 'Start Listening';
+  document.getElementById('pitchNoteDisplay').textContent = '—';
+  document.getElementById('pitchCentsDisplay').textContent = 'Detection stopped';
+  document.getElementById('pitchCentsDisplay').className = 'pitch-cents-display';
+  setNeedle(0);
+}
+
+function updatePitchLoop() {
+  if (!pitchDetectActive || !pitchAnalyser) return;
+  const buffer = new Float32Array(pitchAnalyser.fftSize);
+  pitchAnalyser.getFloatTimeDomainData(buffer);
+  const freq = autocorrelationPitch(buffer, pitchAudioCtx.sampleRate);
+  const info = freq > 0 ? freqToNoteAndCents(freq) : null;
+
+  const now = Date.now();
+  if (info) {
+    const { noteName, octave, cents } = info;
+    const noteStr = `${noteName}${octave}`;
+    document.getElementById('pitchNoteDisplay').textContent = noteStr;
+    document.getElementById('pitchDetectedNote').textContent = noteStr;
+
+    // Needle: cents from -50 to +50, maps to -90deg to +90deg rotation
+    const clampedCents = Math.max(-50, Math.min(50, cents));
+    setNeedle(clampedCents / 50 * 90);
+
+    // Cents display + color
+    const centsEl = document.getElementById('pitchCentsDisplay');
+    const absC = Math.abs(cents);
+    if (absC <= 15) {
+      centsEl.textContent = cents === 0 ? '✓ In tune' : `${cents > 0 ? '+' : ''}${cents} cents — In tune!`;
+      centsEl.className = 'pitch-cents-display in-tune';
+      pitchInTuneStreak++;
+      if (pitchInTuneStreak > pitchBestStreak) pitchBestStreak = pitchInTuneStreak;
+    } else if (absC <= 30) {
+      centsEl.textContent = `${cents > 0 ? '+' : ''}${cents} cents — ${cents > 0 ? 'Slightly sharp' : 'Slightly flat'}`;
+      centsEl.className = 'pitch-cents-display close';
+      pitchInTuneStreak = 0;
+    } else {
+      centsEl.textContent = `${cents > 0 ? '+' : ''}${cents} cents — ${cents > 0 ? 'Too sharp ↑' : 'Too flat ↓'}`;
+      centsEl.className = 'pitch-cents-display off';
+      pitchInTuneStreak = 0;
+    }
+
+    document.getElementById('pitchStatusText').textContent = `${Math.round(freq)} Hz`;
+    document.getElementById('pitchBestStreak').textContent = pitchBestStreak;
+
+    pitchHistory.push({ cents, time: now });
+    pitchAccuracySamples.push(absC);
+    if (pitchAccuracySamples.length > 5) {
+      const avg = pitchAccuracySamples.reduce((a, b) => a + b, 0) / pitchAccuracySamples.length;
+      const accuracyPct = Math.max(0, Math.round(100 - avg * 2));
+      document.getElementById('pitchAccuracyAvg').textContent = `${accuracyPct}%`;
+    }
+  } else {
+    document.getElementById('pitchNoteDisplay').textContent = '...';
+    document.getElementById('pitchCentsDisplay').textContent = 'Listening...';
+    document.getElementById('pitchCentsDisplay').className = 'pitch-cents-display';
+    document.getElementById('pitchStatusText').textContent = 'Sing a note to detect pitch';
+    setNeedle(0);
+  }
+
+  // Keep last 10s of history
+  const cutoff = now - 10000;
+  pitchHistory = pitchHistory.filter(p => p.time >= cutoff);
+  drawPitchHistory();
+
+  pitchAnimFrame = requestAnimationFrame(updatePitchLoop);
+}
+
+function setNeedle(degrees) {
+  const needle = document.getElementById('pitchNeedle');
+  if (needle) needle.setAttribute('transform', `rotate(${degrees}, 140, 140)`);
+}
+
+function drawPitchHistory() {
+  const canvas = document.getElementById('pitchHistoryCanvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width, h = canvas.height;
+  ctx.clearRect(0, 0, w, h);
+
+  // Background
+  ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--surface').trim() || '#0f0f1a';
+  ctx.fillRect(0, 0, w, h);
+
+  // Center line (0 cents)
+  ctx.strokeStyle = 'rgba(82,183,136,0.3)';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([4, 4]);
+  ctx.beginPath(); ctx.moveTo(0, h/2); ctx.lineTo(w, h/2); ctx.stroke();
+  ctx.setLineDash([]);
+
+  if (pitchHistory.length < 2) return;
+
+  const now = Date.now();
+  const windowMs = 10000;
+
+  ctx.beginPath();
+  let first = true;
+  for (const pt of pitchHistory) {
+    const x = ((pt.time - (now - windowMs)) / windowMs) * w;
+    const y = h/2 - (pt.cents / 50) * (h/2 - 4);
+    const clampedY = Math.max(2, Math.min(h - 2, y));
+    if (first) { ctx.moveTo(x, clampedY); first = false; }
+    else ctx.lineTo(x, clampedY);
+  }
+  ctx.strokeStyle = '#d4a853';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+}
+
+function updatePitchSessionTimer() {
+  if (!pitchDetectActive) return;
+  const elapsed = Math.floor((Date.now() - pitchSessionStartTime) / 1000);
+  const m = Math.floor(elapsed / 60);
+  const s = elapsed % 60;
+  const el = document.getElementById('pitchSessionTime');
+  if (el) el.textContent = `${m}:${s.toString().padStart(2,'0')}`;
+  setTimeout(updatePitchSessionTimer, 1000);
+}
+
+// ════════════════════════════════════════════════════════════
+// VOCAL COACH — MediaRecorder + Evaluate Singing
+// ════════════════════════════════════════════════════════════
+let mediaRecorder = null;
+let recordedChunks = [];
+let recordingActive = false;
+let recordingTimerInterval = null;
+let recordingSeconds = 0;
+let coachHistory = JSON.parse(localStorage.getItem('solfai-coach-history') || '[]');
+
+function toggleRecording() {
+  if (recordingActive) stopRecording();
+  else startRecording();
+}
+
+async function startRecording() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    recordedChunks = [];
+    mediaRecorder = new MediaRecorder(stream, { mimeType: getSupportedMimeType() });
+    mediaRecorder.ondataavailable = e => { if (e.data.size > 0) recordedChunks.push(e.data); };
+    mediaRecorder.onstop = () => { stream.getTracks().forEach(t => t.stop()); };
+    mediaRecorder.start(100);
+    recordingActive = true;
+    recordingSeconds = 0;
+
+    document.getElementById('btnStartRecord').classList.add('recording');
+    document.getElementById('recordBtnIcon').textContent = '⏹';
+    document.getElementById('recordBtnText').textContent = 'Stop Recording';
+    document.getElementById('recordTimer').classList.add('show');
+    document.getElementById('btnSubmitRecording').classList.remove('show');
+    document.getElementById('coachScores').classList.remove('show');
+
+    recordingTimerInterval = setInterval(() => {
+      recordingSeconds++;
+      const m = Math.floor(recordingSeconds / 60);
+      const s = recordingSeconds % 60;
+      document.getElementById('recordTimer').textContent = `${m}:${s.toString().padStart(2,'0')}`;
+    }, 1000);
+  } catch (err) {
+    alert('Microphone access denied. Please allow microphone access to use this feature.');
+  }
+}
+
+function stopRecording() {
+  if (!mediaRecorder || mediaRecorder.state === 'inactive') return;
+  mediaRecorder.stop();
+  recordingActive = false;
+  clearInterval(recordingTimerInterval);
+
+  document.getElementById('btnStartRecord').classList.remove('recording');
+  document.getElementById('recordBtnIcon').textContent = '⏺';
+  document.getElementById('recordBtnText').textContent = 'Record Again';
+  if (recordedChunks.length > 0) {
+    document.getElementById('btnSubmitRecording').classList.add('show');
+  }
+}
+
+function getSupportedMimeType() {
+  const types = ['audio/webm;codecs=opus','audio/webm','audio/ogg;codecs=opus','audio/mp4'];
+  return types.find(t => MediaRecorder.isTypeSupported(t)) || 'audio/webm';
+}
+
+async function submitRecording() {
+  if (!recordedChunks.length) return;
+  const blob = new Blob(recordedChunks, { type: getSupportedMimeType() });
+  const formData = new FormData();
+  formData.append('audio', blob, 'recording.webm');
+  if (window.currentAnalysis) {
+    formData.append('pieceTitle', currentAnalysis.pieceTitle || '');
+    formData.append('keySignature', currentAnalysis.keySignature || '');
+    formData.append('startingPitch', currentAnalysis.startingPitch || '');
+    formData.append('solfege', currentAnalysis.firstNotesSolfege?.join(' ') || '');
+  }
+  formData.append('selectedPart', window.selectedPart || 'Soprano');
+
+  document.getElementById('coachEvaluating').classList.add('show');
+  document.getElementById('coachScores').classList.remove('show');
+  document.getElementById('btnSubmitRecording').classList.remove('show');
+
+  try {
+    const resp = await fetch('/api/evaluate-singing', { method: 'POST', body: formData });
+    if (!resp.ok) throw new Error(`Server error: ${resp.status}`);
+    const result = await resp.json();
+    document.getElementById('coachEvaluating').classList.remove('show');
+    renderCoachScores(result);
+
+    // Save to history
+    coachHistory.unshift({ ...result, date: new Date().toLocaleDateString(), piece: currentAnalysis?.pieceTitle || 'Unknown' });
+    if (coachHistory.length > 10) coachHistory.splice(10);
+    localStorage.setItem('solfai-coach-history', JSON.stringify(coachHistory));
+    renderCoachHistory();
+  } catch (err) {
+    document.getElementById('coachEvaluating').classList.remove('show');
+    document.getElementById('btnSubmitRecording').classList.add('show');
+    alert('Could not evaluate singing: ' + err.message);
+  }
+}
+
+function renderCoachScores(result) {
+  const categories = [
+    { key: 'overallScore', label: 'Overall', color: '#d4a853' },
+    { key: 'pitchAccuracy', label: 'Pitch', color: '#52b788' },
+    { key: 'toneQuality', label: 'Tone', color: '#8b7fd4' },
+    { key: 'breathSupport', label: 'Breath', color: '#4fc3f7' },
+    { key: 'vowelShape', label: 'Vowels', color: '#f06292' },
+    { key: 'rhythm', label: 'Rhythm', color: '#ffb74d' },
+  ];
+
+  const ringsHtml = categories.map(cat => {
+    const score = result[cat.key] || 0;
+    const radius = 32, circumference = 2 * Math.PI * radius;
+    const offset = circumference - (score / 100) * circumference;
+    return `<div class="score-ring-item">
+      <svg class="score-ring-svg" viewBox="0 0 80 80">
+        <circle cx="40" cy="40" r="${radius}" fill="none" stroke="#252535" stroke-width="7"/>
+        <circle cx="40" cy="40" r="${radius}" fill="none" stroke="${cat.color}" stroke-width="7"
+          stroke-dasharray="${circumference}" stroke-dashoffset="${circumference}"
+          stroke-linecap="round" transform="rotate(-90 40 40)"
+          style="transition: stroke-dashoffset 1.2s ease; stroke-dashoffset: ${offset}"/>
+        <text x="40" y="45" text-anchor="middle" font-family="Cormorant Garamond,serif" font-size="16" fill="${cat.color}" font-weight="700">${score}</text>
+      </svg>
+      <div class="score-ring-label">${cat.label}</div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('coachScoreRings').innerHTML = ringsHtml;
+  document.getElementById('coachFeedbackText').textContent = result.detailedFeedback || 'Great effort!';
+  const items = Array.isArray(result.actionItems) ? result.actionItems : [];
+  document.getElementById('coachActions').innerHTML = items.map((item, i) =>
+    `<div class="coach-action-item"><span class="coach-action-num">${i+1}.</span> ${escapeHtml(item)}</div>`
+  ).join('');
+
+  document.getElementById('coachScores').classList.add('show');
+}
+
+function renderCoachHistory() {
+  if (!coachHistory.length) { document.getElementById('coachHistorySection').style.display = 'none'; return; }
+  document.getElementById('coachHistorySection').style.display = 'block';
+  document.getElementById('coachHistoryList').innerHTML = coachHistory.map((h, i) => `
+    <div class="coach-history-item" onclick="showHistoryScore(${i})">
+      <div>
+        <div style="font-size:0.85rem;color:var(--text);font-weight:500;">${escapeHtml(h.piece || 'Unknown')}</div>
+        <div class="coach-history-date">${escapeHtml(h.date || '')} · ${escapeHtml(window.selectedPart || 'Soprano')}</div>
+      </div>
+      <div class="coach-history-score">${h.overallScore || '—'}</div>
+    </div>`).join('');
+}
+
+function showHistoryScore(i) { if (coachHistory[i]) renderCoachScores(coachHistory[i]); }
+
+// Init coach history on load
+renderCoachHistory();
+
+// ════════════════════════════════════════════════════════════
+// PRACTICE MODE — Measure by Measure
+// ════════════════════════════════════════════════════════════
+let practiceData = []; // Array of {num, notes, solfege, lyrics}
+let practiceIndex = 0;
+let practiceStreak = 0;
+
+function checkPracticeReady() {
+  // Practice mode is ready if solfege has been loaded
+  const solfegeOutput = document.getElementById('solfegeOutput');
+  if (solfegeOutput && solfegeOutput.classList.contains('show') && solfegeOutput.innerHTML.length > 50) {
+    parsePracticeData(solfegeOutput);
+    return true;
+  }
+  return false;
+}
+
+function parsePracticeDataFromText(text) {
+  if (!text) return [];
+  const measures = [];
+  const lines = text.split('\n');
+  let current = null;
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (/^m\.\d+:/.test(trimmed)) {
+      if (current) measures.push(current);
+      current = { num: trimmed.replace(/^m\./, '').replace(/:.*/, ''), notes: [], solfege: [], lyrics: '' };
+    } else if (current && trimmed.startsWith('Notes:')) {
+      current.notes = trimmed.replace('Notes:', '').trim().split(/\s+/).filter(Boolean);
+    } else if (current && trimmed.startsWith('Solfege:')) {
+      current.solfege = trimmed.replace('Solfege:', '').trim().split(/\s+/).filter(Boolean);
+    } else if (current && trimmed.startsWith('Lyrics:')) {
+      current.lyrics = trimmed.replace('Lyrics:', '').trim().replace(/^"|"$/g, '');
+    }
+  }
+  if (current) measures.push(current);
+  return measures;
+}
+
+function parsePracticeData(solfegeEl) {
+  // Try to extract from the solfege output element's data
+  const text = solfegeEl.getAttribute('data-raw-text') || '';
+  if (text) {
+    practiceData = parsePracticeDataFromText(text);
+  } else {
+    // Parse from rendered HTML as fallback
+    practiceData = [];
+    const cards = solfegeEl.querySelectorAll('[style*="Measure"]');
+    cards.forEach((card, i) => {
+      const texts = card.querySelectorAll('div');
+      let notes = [], solfege = [], lyrics = '';
+      texts.forEach(t => {
+        if (t.textContent.includes('Notes')) notes = t.nextElementSibling?.textContent?.split(/\s+/).filter(Boolean) || [];
+        if (t.textContent.includes('Solfege')) solfege = t.nextElementSibling?.textContent?.split(/[·\s]+/).filter(Boolean) || [];
+        if (t.textContent.includes('Lyrics')) lyrics = t.nextElementSibling?.textContent || '';
+      });
+      practiceData.push({ num: String(i + 1), notes, solfege, lyrics });
+    });
+  }
+  enablePracticeMode();
+}
+
+function enablePracticeMode() {
+  if (practiceData.length === 0) return;
+  document.getElementById('btnStartPractice').disabled = false;
+  document.getElementById('practiceLoadHint').textContent = `${practiceData.length} measures ready to practice!`;
+}
+
+function startPracticeMode() {
+  if (practiceData.length === 0) {
+    document.getElementById('practiceLoadHint').textContent = 'Please generate Solfege first in the Solfege tab, then come back here.';
+    return;
+  }
+  practiceIndex = 0;
+  practiceStreak = 0;
+  document.getElementById('practiceProgressBar').style.display = 'block';
+  showPracticeMeasure();
+}
+
+function showPracticeMeasure() {
+  if (!practiceData.length) return;
+  const m = practiceData[practiceIndex];
+  document.getElementById('practiceMeasureNum').textContent = `Measure ${m.num} of ${practiceData.length}`;
+  document.getElementById('practiceSolfegeDisplay').textContent = m.solfege.join('  ') || '—';
+  document.getElementById('practiceNotesDisplay').textContent = m.notes.join(' ') || '';
+  document.getElementById('practiceLyricsDisplay').textContent = m.lyrics || '';
+
+  // Progress
+  const pct = ((practiceIndex + 1) / practiceData.length) * 100;
+  document.getElementById('practiceProgressFill').style.width = `${pct}%`;
+  document.getElementById('practiceProgressText').textContent = `Measure ${practiceIndex + 1} of ${practiceData.length}`;
+  document.getElementById('practiceStreakText').textContent = `🔥 ${practiceStreak} streak`;
+
+  document.getElementById('btnPrevMeasure').disabled = practiceIndex === 0;
+  document.getElementById('btnNextMeasure').textContent = practiceIndex === practiceData.length - 1 ? '✓ Done' : 'Next →';
+
+  document.getElementById('practiceMeasureCard').classList.add('show');
+}
+
+function nextMeasure() {
+  const card = document.getElementById('practiceMeasureCard');
+  if (!card.classList.contains('show')) return;
+  practiceStreak++;
+  if (practiceStreak > 0 && practiceStreak % 3 === 0) launchConfetti();
+  if (practiceIndex < practiceData.length - 1) {
+    practiceIndex++;
+    showPracticeMeasure();
+  } else {
+    // Done!
+    launchConfetti();
+    document.getElementById('practiceSolfegeDisplay').textContent = '🎉 Practice Complete!';
+    document.getElementById('practiceNotesDisplay').textContent = '';
+    document.getElementById('practiceLyricsDisplay').textContent = `Great work! ${practiceData.length} measures mastered.`;
+    document.getElementById('btnNextMeasure').disabled = true;
+  }
+}
+
+function prevMeasure() {
+  if (practiceIndex > 0) {
+    practiceStreak = Math.max(0, practiceStreak - 1);
+    practiceIndex--;
+    showPracticeMeasure();
+  }
+}
+
+function playCurrentMeasure() {
+  if (!practiceData[practiceIndex]) return;
+  const notes = practiceData[practiceIndex].notes || [];
+  if (!notes.length) return;
+  const tempo = window.currentAnalysis?.tempo?.match(/\d+/)?.[0] || 80;
+  const beatMs = (60 / Number(tempo)) * 1000;
+  notes.forEach((noteStr, i) => {
+    const parsed = parseNoteString(noteStr);
+    if (parsed) {
+      setTimeout(() => playTone(parsed.freq, 0.6), i * beatMs * 0.6);
+    }
+  });
+}
+
+// ════════════════════════════════════════════════════════════
+// CONFETTI
+// ════════════════════════════════════════════════════════════
+function launchConfetti() {
+  const canvas = document.getElementById('confettiCanvas');
+  if (!canvas) return;
+  canvas.style.display = 'block';
+  const ctx = canvas.getContext('2d');
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+
+  const pieces = Array.from({ length: 80 }, () => ({
+    x: Math.random() * canvas.width,
+    y: -20,
+    vx: (Math.random() - 0.5) * 6,
+    vy: Math.random() * 4 + 2,
+    color: ['#d4a853','#8b7fd4','#52b788','#f0c878','#e05c5c'][Math.floor(Math.random() * 5)],
+    size: Math.random() * 8 + 4,
+    rotation: Math.random() * Math.PI * 2,
+    rotSpeed: (Math.random() - 0.5) * 0.2,
+  }));
+
+  let frame = 0;
+  function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    pieces.forEach(p => {
+      p.x += p.vx; p.y += p.vy; p.vy += 0.1; p.rotation += p.rotSpeed;
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.rotation);
+      ctx.fillStyle = p.color;
+      ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.6);
+      ctx.restore();
+    });
+    frame++;
+    if (frame < 120) requestAnimationFrame(draw);
+    else { ctx.clearRect(0, 0, canvas.width, canvas.height); canvas.style.display = 'none'; }
+  }
+  draw();
+}
+
+// ════════════════════════════════════════════════════════════
+// HOOK INTO EXISTING RENDER TO TRIGGER ANIMATIONS
+// ════════════════════════════════════════════════════════════
+// Patch loadSolfege to also save raw text and enable practice mode
+const _origLoadSolfege = window.loadSolfege;
+if (typeof loadSolfege === 'function') {
+  // Can't easily patch since it's declared with function, use event-based approach
+}
+
+// Watch for solfege output appearing via MutationObserver
+const solfegeEl = document.getElementById('solfegeOutput');
+if (solfegeEl) {
+  const observer = new MutationObserver(() => {
+    if (solfegeEl.classList.contains('show') && solfegeEl.innerHTML.length > 50) {
+      checkPracticeReady();
+    }
+  });
+  observer.observe(solfegeEl, { attributes: true, childList: true, subtree: true });
+}
+
+// Patch renderStructured to trigger animations (called after page load)
+document.addEventListener('DOMContentLoaded', () => {});
+// Use a polling check since renderStructured is in the main script closure
+let _lastInfoGridLength = 0;
+setInterval(() => {
+  const grid = document.getElementById('infoGrid');
+  if (!grid) return;
+  const len = grid.children.length;
+  if (len !== _lastInfoGridLength && len > 0) {
+    _lastInfoGridLength = len;
+    setTimeout(animateInfoCards, 100);
+    setTimeout(animateDiffBars, 300);
+    // Check if practice can be enabled
+    checkPracticeReady();
+  }
+}, 500);
+
 </script>
 
 <!-- Google Identity Services -->

@@ -17,8 +17,11 @@ import express from 'express';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { createHash } from 'crypto';
-import { readFileSync, writeFileSync, existsSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, unlinkSync } from 'fs';
 import sharp from 'sharp';
+import multer from 'multer';
+
+const upload = multer({ dest: '/tmp/solfai-uploads/' });
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -67,7 +70,7 @@ const ANALYZE_SCHEMA = {
     time_signature: {
       type: "STRING",
       description: "The time signature at the beginning of the piece.",
-      enum: ["4/4","3/4","2/4","6/8","9/8","12/8","2/2","3/8","3/2","6/4","5/4","7/8"]
+      enum: ["4/4","3/4","2/4","4/8","6/8","9/8","12/8","2/2","3/8","3/2","6/4","5/4","7/8"]
     },
     tempo: {
       type: "STRING",
@@ -156,12 +159,19 @@ function resolveKeyFromCounts(flatCount, sharpCount, geminiKey) {
   const entry = KEY_FROM_COUNT[code];
   if (!entry) return { key: geminiKey || 'Unknown', confident: false };
 
-  const isMinor = (geminiKey || '').toLowerCase().includes('minor');
-  const keyName = isMinor ? entry.minor : entry.major;
+  // MAJOR BIAS FIX: Default to major — most choral music (especially spirituals, folk songs,
+  // classical SATB repertoire) is in major. Only use minor if Gemini says minor AND the exact
+  // minor key it named matches what we'd expect from the accidental count.
+  const geminiSaysMinor = (geminiKey || '').toLowerCase().includes('minor');
+  const geminiMatchesExpectedMinor = geminiSaysMinor &&
+    (geminiKey || '').toLowerCase().replace(/\s+/g,'') === entry.minor.toLowerCase().replace(/\s+/g,'');
+
+  // Prefer major unless gemini is explicit AND correct about the minor key
+  const keyName = geminiMatchesExpectedMinor ? entry.minor : entry.major;
+
   const accLabel = sharpCount > 0 ? `${sharpCount} sharp${sharpCount > 1 ? 's' : ''}` :
                    flatCount > 0 ? `${flatCount} flat${flatCount > 1 ? 's' : ''}` : 'no sharps or flats';
 
-  // FIX BUG11: Check if code-calculated key agrees with Gemini's key
   const confident = geminiKey && (
     geminiKey.toLowerCase().replace(/\s+/g,'') === keyName.toLowerCase().replace(/\s+/g,'')
   );
@@ -443,9 +453,33 @@ CRITICAL RULES:
 - If any image is a title/cover page with no staves or notes, SKIP IT and look at the next image.
 - Count accidentals (flats ♭ or sharps ♯) that appear between the clef symbol and the time signature. These define the key signature.
 - Do NOT count accidentals that appear before individual notes (those are accidentals, not key signature).
-- For the starting pitch: find the VOCAL staff (the one with lyrics text underneath). Skip any piano introduction measures. Find the very first note that has a lyric syllable directly below it.
 - SATB voice identification: Soprano=top treble staff, stems pointing up. Alto=bottom treble staff, stems pointing down. Tenor=treble-8 clef (has small 8 below treble clef) or bass clef, stems up. Bass=bass clef, stems down.
-- If you recognize this piece from its title, composer, or musical content, use your knowledge to verify your key signature reading.`;
+- If you recognize this piece from its title, composer, or musical content, use your knowledge to verify your key signature reading.
+- KEY SIGNATURE BIAS: When the piece could be either major or minor based on accidentals alone, strongly prefer major. Most choral music, folk songs, and spirituals are in major keys. Only call it minor if you are highly certain.
+
+WATERMARKS — IGNORE COMPLETELY:
+- Some sheet music has diagonal or translucent text like "For perusal purposes only", "Preview copy", "Rental material", "Not for performance", or similar watermarks.
+- These watermarks are NOT part of the music. Do NOT let them affect your reading of key signatures, time signatures, note names, dynamics, or any other musical data.
+- Look THROUGH the watermark text to read the actual notes and accidentals beneath it.
+
+STARTING PITCH — TREBLE CLEF (memorize these exactly):
+Lines, bottom to top: E4 (1st/bottom line), G4 (2nd line), B4 (3rd/middle line), D5 (4th line), F5 (5th/top line). Mnemonic: Every Good Boy Does Fine.
+Spaces, bottom to top: F4 (1st space), A4 (2nd space), C5 (3rd space), E5 (4th/top space). Mnemonic: FACE.
+- A note sitting ON a line has the line passing through the center of the note head.
+- A note sitting IN a space has the note head between two lines (not touching either).
+- Do NOT confuse a note on the 3rd line (B4) with a note in the 3rd space (C5) — they look close but are different notes.
+- For treble-8 clef (tenor clef with small 8 below): ALL pitches are one octave lower than treble clef (E3, G3, B3, D4, F4 for lines; F3, A3, C4, E4 for spaces).
+
+STARTING PITCH — BASS CLEF:
+Lines, bottom to top: G2 (1st line), B2 (2nd line), D3 (3rd line), F3 (4th line), A3 (5th line). Mnemonic: Good Boys Do Fine Always.
+Spaces, bottom to top: A2, C3, E3, G3. Mnemonic: All Cows Eat Grass.
+
+STARTING PITCH PROCEDURE:
+1. Find the vocal staff (the one with lyrics text underneath). Skip piano intro measures.
+2. Find the VERY FIRST note that has a lyric syllable directly below it.
+3. Count carefully: is this note ON a line or IN a space?
+4. Which line or space number is it (counting from the bottom)?
+5. Look up the correct pitch using the reference above. Double-check by looking at adjacent notes.`;
 
   const pass1UserText = `Extract all musical data for the ${part} part from this sheet music. Skip title/cover pages. Be precise about accidental counting.`;
 
@@ -785,5 +819,83 @@ SATB: Soprano=top treble stems up, Alto=bottom treble stems down, Tenor=top bass
   }
 }
 
+// ─── Evaluate Singing ─────────────────────────────────────
+app.post('/api/evaluate-singing', upload.single('audio'), async (req, res) => {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) return res.status(500).json({ error: 'GEMINI_API_KEY not configured' });
+  if (!req.file) return res.status(400).json({ error: 'No audio file provided' });
+
+  const filePath = req.file.path;
+  try {
+    const { pieceTitle, keySignature, startingPitch, solfege, selectedPart } = req.body;
+    const audioBuffer = readFileSync(filePath);
+    const audioBase64 = audioBuffer.toString('base64');
+    const mimeType = req.file.mimetype || 'audio/webm';
+
+    const systemPrompt = `You are a professional choir director and vocal coach evaluating a student's singing. Be encouraging, specific, and constructive. Always find something positive to say first.`;
+
+    const userText = `Listen to this audio of a student singing. They are a ${selectedPart || 'choir'} singer.
+Context: ${pieceTitle ? `Piece: "${pieceTitle}"` : 'Unknown piece'}, Key: ${keySignature || 'unknown'}, Starting pitch: ${startingPitch || 'unknown'}.
+${solfege ? `Expected solfege: ${solfege}` : ''}
+
+Evaluate their singing as a professional choir director. Return ONLY valid JSON:
+{
+  "overallScore": <integer 0-100>,
+  "pitchAccuracy": <integer 0-100>,
+  "toneQuality": <integer 0-100>,
+  "breathSupport": <integer 0-100>,
+  "vowelShape": <integer 0-100>,
+  "rhythm": <integer 0-100>,
+  "detailedFeedback": "<2-3 sentences of warm, specific, constructive feedback>",
+  "actionItems": ["<specific thing to improve 1>", "<specific thing to improve 2>", "<specific thing to improve 3>"]
+}
+
+Be encouraging. Most student singers score 40-75. Only score below 30 if the recording is clearly off-pitch or unclear.`;
+
+    const url = `${BASE_URL}/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
+    const body = {
+      contents: [{ role: 'user', parts: [
+        { text: userText },
+        { inlineData: { mimeType, data: audioBase64 } }
+      ]}],
+      system_instruction: { parts: [{ text: systemPrompt }] },
+      generation_config: {
+        temperature: 0.3,
+        max_output_tokens: 1024,
+        response_mime_type: 'application/json',
+        thinking_config: { thinking_budget: 2000 },
+      },
+    };
+
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+    if (!resp.ok) {
+      const errText = await resp.text();
+      let detail = `Gemini error: ${resp.status}`;
+      try { detail = JSON.parse(errText).error?.message || detail; } catch (_) {}
+      throw new Error(detail);
+    }
+
+    const data = await resp.json();
+    const text = data.candidates?.[0]?.content?.parts
+      ?.filter(p => p.text && !p.thought).map(p => p.text).join('') || '{}';
+
+    let result;
+    try { result = JSON.parse(text.replace(/```json?|```/gi, '').trim()); }
+    catch (_) { result = { overallScore: 60, pitchAccuracy: 60, toneQuality: 60, breathSupport: 60, vowelShape: 60, rhythm: 60, detailedFeedback: 'Great effort! Keep practicing.', actionItems: ['Focus on pitch accuracy', 'Work on breath support', 'Practice regularly'] }; }
+
+    return res.status(200).json(result);
+  } catch (err) {
+    console.error('Evaluate-singing error:', err.message);
+    return res.status(500).json({ error: err.message });
+  } finally {
+    try { unlinkSync(filePath); } catch (_) {}
+  }
+});
+
 // ─── Start ────────────────────────────────────────────────
-app.listen(PORT, () => console.log(`Solfai v5 running on port ${PORT}`));
+app.listen(PORT, () => console.log(`Solfai v6 running on port ${PORT}`));
