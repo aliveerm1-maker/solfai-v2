@@ -20,6 +20,7 @@ import { createHash } from 'crypto';
 import { readFileSync, writeFileSync, existsSync, unlinkSync } from 'fs';
 import sharp from 'sharp';
 import multer from 'multer';
+import AdmZip from 'adm-zip';
 
 const upload = multer({ dest: '/tmp/solfai-uploads/' });
 
@@ -223,6 +224,15 @@ async function preprocessForGemini(base64Data, mode = 'full') {
         .grayscale()
         .normalise()
         .sharpen({ sigma: 2.0 })
+        .threshold(180)
+        .jpeg({ quality: 95 });
+    } else if (mode === 'binarize') {
+      // High-contrast binarized mode for solfege extraction — pure B/W
+      pipeline = sharp(buf)
+        .grayscale()
+        .normalise()
+        .sharpen({ sigma: 2.0 })
+        .threshold(160)
         .jpeg({ quality: 95 });
     } else {
       pipeline = sharp(buf)
@@ -237,6 +247,48 @@ async function preprocessForGemini(base64Data, mode = 'full') {
   } catch (e) {
     console.error('Preprocessing failed, using original:', e.message);
     return base64Data;
+  }
+}
+
+// ─── Image segmentation for tall images ──────────────────
+async function segmentImage(base64Data, maxSegments = 3) {
+  try {
+    const buf = Buffer.from(base64Data, 'base64');
+    const meta = await sharp(buf).metadata();
+
+    // Only segment if image is tall (aspect ratio suggests multiple systems)
+    // Typical single-line sheet music is wider than tall
+    if (meta.height < meta.width * 0.8 || meta.height < 800) {
+      return null; // Not tall enough to need segmentation
+    }
+
+    const numSegments = Math.min(maxSegments, Math.ceil(meta.height / (meta.width * 0.4)));
+    if (numSegments <= 1) return null;
+
+    const segmentHeight = Math.ceil(meta.height / numSegments);
+    const segments = [];
+
+    for (let i = 0; i < numSegments; i++) {
+      const top = i * segmentHeight;
+      const height = Math.min(segmentHeight, meta.height - top);
+      if (height < 100) break;
+
+      const segBuf = await sharp(buf)
+        .extract({ left: 0, top, width: meta.width, height })
+        .grayscale()
+        .normalise()
+        .sharpen({ sigma: 2.0 })
+        .threshold(160)
+        .jpeg({ quality: 95 })
+        .toBuffer();
+
+      segments.push(segBuf.toString('base64'));
+    }
+
+    return segments.length > 1 ? segments : null;
+  } catch (e) {
+    console.error('Segmentation failed:', e.message);
+    return null;
   }
 }
 
@@ -641,12 +693,12 @@ function buildTextSummary(s, part) {
 // ─── SOLFEGE v7: Parallel dual-extraction + self-consistency + structured JSON ─
 async function handleSolfege(res, apiKey, imageParts, part) {
 
-  // Preprocess images
+  // Preprocess images with binarization for maximum note clarity
   const processedParts = [];
   for (const p of imageParts.slice(0, 4)) {
     if (p.inlineData?.mimeType === 'image/jpeg') {
       try {
-        const enhanced = await preprocessForGemini(p.inlineData.data, 'full');
+        const enhanced = await preprocessForGemini(p.inlineData.data, 'binarize');
         processedParts.push({ inlineData: { mimeType: 'image/jpeg', data: enhanced } });
       } catch (_) { processedParts.push(p); }
     } else {
@@ -702,18 +754,6 @@ Read EVERY note twice before writing it. Pay special attention to:
 - Octave numbers (does this note look higher or lower than the one before it?)
 ${outputFormat}`;
 
-  // Step 2: Run TWO note extractions in PARALLEL (self-consistency)
-  const [ext1Raw, ext2Raw] = await Promise.all([
-    callGemini(apiKey, sysBase,
-      [{ text: `Extract all notes for ${part} (staff #${staffInfo.vocal_staff_number}), measure by measure. JSON array only.` }, ...processedParts],
-      { temperature: 0, maxOutputTokens: 8192, thinkingBudget: 6000 }
-    ),
-    callGemini(apiKey, sysVerify,
-      [{ text: `Verification pass — carefully re-read each note for ${part} (staff #${staffInfo.vocal_staff_number}). JSON array only.` }, ...processedParts],
-      { temperature: 0, maxOutputTokens: 8192, thinkingBudget: 6000 }
-    ),
-  ]);
-
   // Parse an extraction response into a measure array
   function parseExtraction(raw) {
     try {
@@ -735,38 +775,107 @@ ${outputFormat}`;
     return m ? m[1] : null;
   }
 
+  // Step 2: Try image segmentation for tall images (multiple systems)
+  // If image is tall, extract per-segment for better accuracy, then merge
+  let segmentedMeasures = null;
+  const firstJpeg = imageParts.find(p => p.inlineData?.mimeType === 'image/jpeg');
+  if (firstJpeg) {
+    const segments = await segmentImage(firstJpeg.inlineData.data, 3);
+    if (segments) {
+      console.log(`[Solfai] Image segmented into ${segments.length} strips for solfege`);
+      try {
+        const segResults = await Promise.all(segments.map((seg, idx) =>
+          callGemini(apiKey, sysBase,
+            [{ text: `Extract notes for ${part} from this section of the score (segment ${idx + 1} of ${segments.length}). JSON array only.` },
+             { inlineData: { mimeType: 'image/jpeg', data: seg } }],
+            { temperature: 0, maxOutputTokens: 4096, thinkingBudget: 3000 }
+          )
+        ));
+        segmentedMeasures = segResults.flatMap(r => parseExtraction(r));
+        // Re-number measures sequentially
+        segmentedMeasures.forEach((m, i) => { m.num = i + 1; });
+      } catch (e) {
+        console.warn('[Solfai] Segmented extraction failed, falling back to full image:', e.message);
+      }
+    }
+  }
+
+  // Step 3: Run TWO full-image extractions in PARALLEL (self-consistency)
+  const [ext1Raw, ext2Raw] = await Promise.all([
+    callGemini(apiKey, sysBase,
+      [{ text: `Extract all notes for ${part} (staff #${staffInfo.vocal_staff_number}), measure by measure. JSON array only.` }, ...processedParts],
+      { temperature: 0, maxOutputTokens: 8192, thinkingBudget: 6000 }
+    ),
+    callGemini(apiKey, sysVerify,
+      [{ text: `Verification pass — carefully re-read each note for ${part} (staff #${staffInfo.vocal_staff_number}). JSON array only.` }, ...processedParts],
+      { temperature: 0, maxOutputTokens: 8192, thinkingBudget: 6000 }
+    ),
+  ]);
+
   const measures1 = parseExtraction(ext1Raw);
   const measures2 = parseExtraction(ext2Raw);
   const tonic = extractTonic(ext1Raw) || extractTonic(ext2Raw) || 'C';
 
-  // Step 3: Reconcile both extractions measure by measure
-  const maxLen = Math.max(measures1.length, measures2.length);
+  // Step 4: Reconcile all extractions (full-image pass1, pass2, + segmented if available)
+  const maxLen = Math.max(measures1.length, measures2.length, (segmentedMeasures || []).length);
   const reconciledMeasures = [];
 
   for (let i = 0; i < maxLen; i++) {
     const m1 = measures1[i];
     const m2 = measures2[i];
+    const m3 = segmentedMeasures?.[i]; // from image segmentation
 
+    if (!m1 && !m2 && m3) {
+      // Only segmented extraction got this measure
+      reconciledMeasures.push({ ...m3, confidence: 'low', disagreement: false });
+      continue;
+    }
     if (!m1 && m2) {
       reconciledMeasures.push({ ...m2, confidence: 'medium' });
     } else if (m1 && !m2) {
       reconciledMeasures.push({ ...m1, confidence: 'medium' });
-    } else {
+    } else if (m1 && m2) {
       const n1 = (m1.notes || []).join(',').toLowerCase();
       const n2 = (m2.notes || []).join(',').toLowerCase();
-      const agree = n1 === n2;
-      reconciledMeasures.push({
-        num: m1.num ?? (i + 1),
-        notes: m1.notes || [],
-        lyrics: m1.lyrics || m2.lyrics || '',
-        confidence: agree ? 'high' : 'medium',
-        disagreement: !agree,
-        alt_notes: agree ? null : (m2.notes || []),
-      });
+      const n3 = m3 ? (m3.notes || []).join(',').toLowerCase() : null;
+      const agree12 = n1 === n2;
+
+      if (agree12) {
+        // Both full-image passes agree — high confidence
+        reconciledMeasures.push({
+          num: m1.num ?? (i + 1),
+          notes: m1.notes || [],
+          lyrics: m1.lyrics || m2.lyrics || '',
+          confidence: 'high',
+          disagreement: false,
+          alt_notes: null,
+        });
+      } else if (n3 && (n1 === n3 || n2 === n3)) {
+        // Segmented extraction breaks the tie — use the one that matches
+        const winner = n1 === n3 ? m1 : m2;
+        reconciledMeasures.push({
+          num: winner.num ?? (i + 1),
+          notes: winner.notes || [],
+          lyrics: winner.lyrics || m1.lyrics || m2.lyrics || '',
+          confidence: 'high',
+          disagreement: false,
+          alt_notes: null,
+        });
+      } else {
+        // All three disagree or no segmented data — flag for review
+        reconciledMeasures.push({
+          num: m1.num ?? (i + 1),
+          notes: m1.notes || [],
+          lyrics: m1.lyrics || m2.lyrics || '',
+          confidence: 'medium',
+          disagreement: true,
+          alt_notes: m2.notes || [],
+        });
+      }
     }
   }
 
-  // Step 4: Code-calculate solfege (never trust AI for this)
+  // Step 5: Code-calculate solfege (never trust AI for this)
   const VALID_SOLFEGE = new Set(['Do','Di','Re','Ri','Me','Mi','Fa','Fi','Sol','Si','La','Li','Te','Ti','?']);
   for (const m of reconciledMeasures) {
     m.solfege = (m.notes || []).map(n =>
@@ -993,5 +1102,216 @@ Be encouraging. Most student singers score 40-75. Only score below 30 if the rec
   }
 });
 
+// ─── MusicXML Parser ─────────────────────────────────────
+function parseMusicXML(xmlString, targetPart) {
+  // Extract part list
+  const partList = [];
+  const partListMatch = xmlString.match(/<part-list>([\s\S]*?)<\/part-list>/);
+  if (partListMatch) {
+    const partRegex = /<score-part\s+id="([^"]+)"[\s\S]*?<part-name>([^<]*)<\/part-name>/g;
+    let pm;
+    while ((pm = partRegex.exec(partListMatch[1])) !== null) {
+      partList.push({ id: pm[1], name: pm[2].trim() });
+    }
+  }
+
+  // Find the best matching part for the target voice
+  const target = (targetPart || 'Soprano').toLowerCase();
+  let partId = partList[0]?.id || 'P1';
+  for (const p of partList) {
+    if (p.name.toLowerCase().includes(target)) { partId = p.id; break; }
+  }
+
+  // Extract key signature (fifths value)
+  let fifths = 0;
+  const fifthsMatch = xmlString.match(/<fifths>(-?\d+)<\/fifths>/);
+  if (fifthsMatch) fifths = parseInt(fifthsMatch[1], 10);
+
+  // Resolve key from fifths
+  const sharpCount = fifths > 0 ? fifths : 0;
+  const flatCount = fifths < 0 ? Math.abs(fifths) : 0;
+  let code = sharpCount > 0 ? `${sharpCount}s` : flatCount > 0 ? `${flatCount}b` : '0';
+  const keyEntry = KEY_FROM_COUNT[code];
+  const tonic = keyEntry ? keyEntry.major.split(' ')[0] : 'C';
+
+  // Extract the matching <part> element
+  const partRegex = new RegExp(`<part\\s+id="${partId}"[^>]*>([\\s\\S]*?)<\\/part>`);
+  const partMatch = xmlString.match(partRegex);
+  if (!partMatch) {
+    return { error: `Could not find part "${targetPart}" in the MusicXML file.`, parts: partList };
+  }
+
+  const partXml = partMatch[1];
+  const measures = [];
+
+  // Parse each measure
+  const measureRegex = /<measure[^>]*number="(\d+)"[^>]*>([\s\S]*?)<\/measure>/g;
+  let mm;
+  while ((mm = measureRegex.exec(partXml)) !== null) {
+    const measureNum = parseInt(mm[1], 10);
+    const measureXml = mm[2];
+    const notes = [];
+    const lyrics = [];
+
+    // Parse notes within this measure
+    const noteRegex = /<note>([\s\S]*?)<\/note>/g;
+    let nm;
+    while ((nm = noteRegex.exec(measureXml)) !== null) {
+      const noteXml = nm[1];
+
+      // Skip rests
+      if (noteXml.includes('<rest')) continue;
+      // Skip chord notes (secondary notes in a chord) — keep only the first
+      if (noteXml.includes('<chord')) continue;
+
+      const stepMatch = noteXml.match(/<step>([A-G])<\/step>/);
+      const octaveMatch = noteXml.match(/<octave>(\d)<\/octave>/);
+      const alterMatch = noteXml.match(/<alter>(-?\d+)<\/alter>/);
+
+      if (stepMatch && octaveMatch) {
+        let noteName = stepMatch[1];
+        const alter = alterMatch ? parseInt(alterMatch[1], 10) : 0;
+        if (alter === 1) noteName += '#';
+        else if (alter === -1) noteName += 'b';
+        else if (alter === 2) noteName += '##';
+        else if (alter === -2) noteName += 'bb';
+        noteName += octaveMatch[1];
+        notes.push(noteName);
+      }
+
+      // Extract lyrics
+      const lyricMatch = noteXml.match(/<lyric[\s\S]*?<text>([^<]*)<\/text>/);
+      if (lyricMatch) lyrics.push(lyricMatch[1]);
+    }
+
+    if (notes.length > 0) {
+      measures.push({
+        num: measureNum,
+        notes,
+        lyrics: lyrics.join(' '),
+      });
+    }
+  }
+
+  return { tonic, measures, partId, partList, sharpCount, flatCount };
+}
+
+// ─── MusicXML Upload Route ───────────────────────────────
+const musicxmlUpload = multer({ dest: '/tmp/solfai-uploads/', limits: { fileSize: 10 * 1024 * 1024 } });
+app.post('/api/parse-musicxml', musicxmlUpload.single('file'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No file provided' });
+
+  const filePath = req.file.path;
+  try {
+    const selectedPart = req.body.selectedPart || 'Soprano';
+    let xmlString;
+
+    // Detect .mxl (ZIP) vs .musicxml (plain XML)
+    const originalName = (req.file.originalname || '').toLowerCase();
+    const buf = readFileSync(filePath);
+
+    if (originalName.endsWith('.mxl') || buf[0] === 0x50 && buf[1] === 0x4B) {
+      // .mxl is a ZIP file containing .musicxml
+      const zip = new AdmZip(buf);
+      const entries = zip.getEntries();
+      const xmlEntry = entries.find(e =>
+        e.entryName.endsWith('.musicxml') || e.entryName.endsWith('.xml')
+      ) || entries.find(e => !e.entryName.startsWith('META-INF') && e.entryName.endsWith('.xml'));
+
+      if (!xmlEntry) return res.status(400).json({ error: 'No MusicXML file found inside the .mxl archive.' });
+      xmlString = xmlEntry.getData().toString('utf8');
+    } else {
+      xmlString = buf.toString('utf8');
+    }
+
+    if (!xmlString.includes('<score-partwise') && !xmlString.includes('<score-timewise')) {
+      return res.status(400).json({ error: 'This does not appear to be a valid MusicXML file.' });
+    }
+
+    const result = parseMusicXML(xmlString, selectedPart);
+    if (result.error) return res.status(400).json(result);
+
+    // Code-calculate solfege
+    const VALID_SOLFEGE = new Set(['Do','Di','Re','Ri','Me','Mi','Fa','Fi','Sol','Si','La','Li','Te','Ti','?']);
+    for (const m of result.measures) {
+      m.solfege = (m.notes || []).map(n =>
+        noteToSolfege(n.replace(/\d+$/, ''), result.tonic)
+      );
+      m.valid = m.solfege.every(s => VALID_SOLFEGE.has(s));
+      m.confidence = 'high';
+      m.disagreement = false;
+    }
+
+    console.log(`[Solfai] MusicXML parsed: ${result.measures.length} measures, part=${selectedPart}, key=${result.tonic}`);
+
+    return res.status(200).json({
+      structured: {
+        key: result.tonic,
+        tonic: result.tonic,
+        staffNum: 1,
+        totalStaves: result.partList.length,
+        clef: 'treble',
+        measures: result.measures,
+        disagreements: 0,
+        source: 'musicxml',
+      },
+      text: result.measures.map(m =>
+        `m.${m.num}:\n  Notes:   ${m.notes.join(' ')}\n  Solfege: ${m.solfege.join(' ')}\n  Lyrics:  "${m.lyrics}"`
+      ).join('\n\n'),
+      parts: result.partList.map(p => p.name),
+    });
+  } catch (err) {
+    console.error('MusicXML parse error:', err.message);
+    return res.status(500).json({ error: 'Failed to parse MusicXML: ' + err.message });
+  } finally {
+    try { unlinkSync(filePath); } catch (_) {}
+  }
+});
+
+// ─── Manual Note Entry Route ─────────────────────────────
+app.post('/api/manual-solfege', (req, res) => {
+  const { notes, key } = req.body;
+  if (!notes) return res.status(400).json({ error: 'No notes provided' });
+
+  const tonic = (key || 'C').replace(/\s*(major|minor)/i, '').trim();
+
+  // Parse input: "C4 D4 E4 | F4 G4 A4 | B4 C5"
+  // Pipe separates measures, space separates notes within a measure
+  const rawMeasures = notes.split('|').map(s => s.trim()).filter(Boolean);
+  const measures = rawMeasures.map((m, i) => {
+    const noteList = m.split(/[\s,]+/).filter(Boolean);
+    return { num: i + 1, notes: noteList, lyrics: '' };
+  });
+
+  // Code-calculate solfege
+  const VALID_SOLFEGE = new Set(['Do','Di','Re','Ri','Me','Mi','Fa','Fi','Sol','Si','La','Li','Te','Ti','?']);
+  for (const m of measures) {
+    m.solfege = (m.notes || []).map(n =>
+      noteToSolfege(n.replace(/\d+$/, ''), tonic)
+    );
+    m.valid = m.solfege.every(s => VALID_SOLFEGE.has(s));
+    m.confidence = 'high';
+    m.disagreement = false;
+  }
+
+  console.log(`[Solfai] Manual entry: ${measures.length} measures, key=${tonic}`);
+
+  return res.status(200).json({
+    structured: {
+      key: tonic,
+      tonic,
+      staffNum: 1,
+      totalStaves: 1,
+      clef: 'treble',
+      measures,
+      disagreements: 0,
+      source: 'manual',
+    },
+    text: measures.map(m =>
+      `m.${m.num}:\n  Notes:   ${m.notes.join(' ')}\n  Solfege: ${m.solfege.join(' ')}`
+    ).join('\n\n'),
+  });
+});
+
 // ─── Start ────────────────────────────────────────────────
-app.listen(PORT, () => console.log(`Solfai v7 running on port ${PORT}`));
+app.listen(PORT, () => console.log(`Solfai v8 running on port ${PORT}`));

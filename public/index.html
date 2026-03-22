@@ -596,10 +596,10 @@
   </div>
 
   <div class="upload-zone" id="uploadZone">
-    <input type="file" id="fileInput" accept="image/*,.pdf"/>
+    <input type="file" id="fileInput" accept="image/*,.pdf,.musicxml,.mxl,.xml"/>
     <span class="upload-icon">🎼</span>
     <div class="upload-title">Drop your sheet music here</div>
-    <div class="upload-sub">or click to browse · JPG, PNG, WebP, PDF supported</div>
+    <div class="upload-sub">or click to browse · JPG, PNG, WebP, PDF, MusicXML (.musicxml, .mxl) supported</div>
     <img class="preview-img" id="previewImg" alt="preview"/>
   </div>
 
@@ -663,6 +663,30 @@
       <button class="mode-btn" id="solfegeBtn" onclick="loadSolfege()">🎵 Generate Solfege for my part</button>
       <div class="mode-loading" id="solfegeLoading"><div class="mini-spinner"></div> Generating solfege...</div>
       <div class="mode-output" id="solfegeOutput" style="white-space:normal;"></div>
+
+      <!-- Manual Note Entry Fallback -->
+      <div id="manualEntrySection" style="margin-top:24px;padding:20px;background:var(--card);border:1px solid var(--border);border-radius:12px;">
+        <div style="font-size:0.72rem;text-transform:uppercase;letter-spacing:2px;color:var(--gold);margin-bottom:8px;">Manual Note Entry</div>
+        <div style="font-size:0.82rem;color:var(--text2);margin-bottom:12px;">
+          Type your notes directly for 100% accurate solfege. Use <code style="background:var(--card2);padding:2px 6px;border-radius:4px;">|</code> to separate measures.<br>
+          <span style="color:var(--muted);font-size:0.78rem;">Example: C4 D4 E4 F4 | G4 A4 B4 C5 | D5 E5 F5 G5</span>
+        </div>
+        <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+          <label style="font-size:0.78rem;color:var(--text2);display:flex;align-items:center;gap:6px;">
+            Key:
+            <select id="manualKeySelect" style="background:var(--card2);border:1px solid var(--border);color:var(--text);padding:4px 8px;border-radius:6px;font-family:'Outfit',sans-serif;font-size:0.82rem;">
+              <option value="C">C major</option><option value="G">G major</option><option value="D">D major</option>
+              <option value="A">A major</option><option value="E">E major</option><option value="B">B major</option>
+              <option value="F">F major</option><option value="Bb">Bb major</option><option value="Eb">Eb major</option>
+              <option value="Ab">Ab major</option><option value="Db">Db major</option><option value="F#">F# major</option>
+            </select>
+          </label>
+        </div>
+        <textarea id="manualNotesInput" rows="3" placeholder="C4 D4 E4 F4 | G4 A4 B4 C5" style="width:100%;background:var(--card2);border:1px solid var(--border);color:var(--text);padding:12px;border-radius:8px;font-family:monospace;font-size:0.88rem;resize:vertical;"></textarea>
+        <button onclick="submitManualNotes()" style="margin-top:10px;padding:10px 24px;background:var(--gold-dim);border:1px solid rgba(212,168,83,0.3);color:var(--gold);border-radius:10px;cursor:pointer;font-family:'Outfit',sans-serif;font-size:0.88rem;font-weight:500;transition:all 0.2s;" onmouseover="this.style.background='rgba(212,168,83,0.25)'" onmouseout="this.style.background='var(--gold-dim)'">
+          Calculate Solfege
+        </button>
+      </div>
     </div>
 
     <div id="tab-rhythm" class="tab-content">
@@ -918,8 +942,27 @@
   uploadZone.addEventListener('drop', e => { e.preventDefault(); uploadZone.classList.remove('drag-over'); if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]); });
   fileInput.addEventListener('change', () => { if (fileInput.files[0]) handleFile(fileInput.files[0]); });
 
+  let musicxmlFile = null; // stores the raw File object for MusicXML uploads
+
   function handleFile(file) {
+    musicxmlFile = null; // reset
     imageMime = file.type || 'image/jpeg';
+
+    // MusicXML detection
+    const fname = file.name.toLowerCase();
+    if (fname.endsWith('.musicxml') || fname.endsWith('.mxl') || fname.endsWith('.xml')) {
+      musicxmlFile = file;
+      imageBase64 = null;
+      pdfPages = [];
+      previewImg.style.display = 'none';
+      uploadZone.querySelector('.upload-title').textContent = '🎼 ' + file.name;
+      uploadZone.querySelector('.upload-sub').textContent = '✅ MusicXML file ready — 100% accurate note extraction, no AI needed';
+      analyzeBtn.disabled = false;
+      analyzeBtn.textContent = 'Parse MusicXML';
+      return;
+    }
+
+    analyzeBtn.textContent = 'Analyze Sheet Music';
     if (file.type === 'application/pdf') {
       uploadZone.querySelector('.upload-title').textContent = '⏳ Processing PDF...';
       uploadZone.querySelector('.upload-sub').textContent = 'Preparing for analysis...';
@@ -1001,8 +1044,73 @@
     reader.readAsDataURL(file);
   }
 
+  // ─── MusicXML Upload Handler ────────────────────────────
+  async function handleMusicXML() {
+    if (!musicxmlFile) return;
+    showError('');
+    analyzeBtn.disabled = true;
+    loading.classList.add('show');
+    results.classList.remove('show');
+    const loadingSub = document.getElementById('loadingSub');
+    if (loadingSub) loadingSub.textContent = 'Parsing MusicXML file — no AI needed...';
+
+    try {
+      const formData = new FormData();
+      formData.append('file', musicxmlFile);
+      formData.append('selectedPart', selectedPart);
+
+      const resp = await fetch('/api/parse-musicxml', { method: 'POST', body: formData });
+      if (!resp.ok) {
+        const err = await resp.json();
+        throw new Error(err.error || `Server error: ${resp.status}`);
+      }
+      const data = await resp.json();
+
+      // Show solfege directly — skip analyze tabs since we have no AI overview
+      loading.classList.remove('show');
+      results.classList.add('show');
+
+      // Auto-populate solfege
+      if (data.structured) {
+        _solfegeStructured = data.structured;
+        const outputEl = document.getElementById('solfegeOutput');
+        outputEl.innerHTML = renderSolfegeStructured(data.structured);
+        outputEl.classList.add('show');
+        document.getElementById('solfegeBtn').style.display = 'none';
+
+        // Populate practice data
+        practiceData = data.structured.measures.map(m => ({
+          num: String(m.num), notes: m.notes || [], solfege: m.solfege || [],
+          lyrics: m.lyrics || '', confidence: 'high', disagreement: false,
+        }));
+        enablePracticeMode();
+
+        // Show available parts if multiple
+        if (data.parts && data.parts.length > 1) {
+          showError('');
+          const partsMsg = document.createElement('div');
+          partsMsg.style.cssText = 'font-size:0.82rem;color:var(--success);margin-bottom:12px;';
+          partsMsg.textContent = `MusicXML parsed successfully! Parts found: ${data.parts.join(', ')}. Showing ${selectedPart}.`;
+          outputEl.insertBefore(partsMsg, outputEl.firstChild);
+        }
+      }
+
+      // Switch to solfege tab
+      showTab('solfege', document.querySelectorAll('.tab-btn')[1]);
+      analyzeBtn.disabled = false;
+      analyzeBtn.textContent = 'Parse MusicXML';
+    } catch (err) {
+      loading.classList.remove('show');
+      showError('MusicXML error: ' + err.message);
+      analyzeBtn.disabled = false;
+    }
+  }
+
   // ─── Analyze ────────────────────────────────────────────
   analyzeBtn.addEventListener('click', async () => {
+    // MusicXML flow — skip AI entirely
+    if (musicxmlFile) return handleMusicXML();
+
     showError('');
     analyzeBtn.disabled = true;
     loading.classList.add('show');
@@ -1034,6 +1142,12 @@
       if (data.structured) {
         currentAnalysis = data.structured;
         renderStructured(data.structured);
+        // Pre-fill manual key selector from analysis
+        const keyTonic = (data.structured.keySignature || '').split(' ')[0];
+        const keySelect = document.getElementById('manualKeySelect');
+        if (keySelect && keyTonic) {
+          for (const opt of keySelect.options) { if (opt.value === keyTonic) { opt.selected = true; break; } }
+        }
       } else if (data.text) {
         // Fallback: legacy text parsing
         parseLegacyText(data.text);
@@ -1682,12 +1796,57 @@
     }
   }
 
+  // ─── Manual Note Entry ────────────────────────────────────
+  async function submitManualNotes() {
+    const notesInput = document.getElementById('manualNotesInput').value.trim();
+    if (!notesInput) return;
+    const key = document.getElementById('manualKeySelect').value;
+
+    document.getElementById('solfegeLoading').classList.add('show');
+    try {
+      const resp = await fetch('/api/manual-solfege', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notes: notesInput, key }),
+      });
+      if (!resp.ok) {
+        const err = await resp.json();
+        throw new Error(err.error || `Server error: ${resp.status}`);
+      }
+      const data = await resp.json();
+      document.getElementById('solfegeLoading').classList.remove('show');
+
+      if (data.structured && data.structured.measures.length) {
+        _solfegeStructured = data.structured;
+        const outputEl = document.getElementById('solfegeOutput');
+        outputEl.innerHTML = '<div style="font-size:0.78rem;color:var(--success);margin-bottom:12px;">Solfege calculated from manual note entry — 100% accurate</div>' + renderSolfegeStructured(data.structured);
+        outputEl.classList.add('show');
+        document.getElementById('solfegeBtn').style.display = 'none';
+
+        practiceData = data.structured.measures.map(m => ({
+          num: String(m.num), notes: m.notes || [], solfege: m.solfege || [],
+          lyrics: '', confidence: 'high', disagreement: false,
+        }));
+        enablePracticeMode();
+      }
+    } catch (err) {
+      document.getElementById('solfegeLoading').classList.remove('show');
+      const outputEl = document.getElementById('solfegeOutput');
+      outputEl.textContent = 'Error: ' + err.message;
+      outputEl.classList.add('show');
+    }
+  }
+
   // Render structured solfege JSON as nice measure cards with note-above / solfege-below layout
   function renderSolfegeStructured(s) {
     const disagreements = s.measures.filter(m => m.disagreement).length;
+    const sourceLabel = s.source === 'musicxml' ? '📄 MusicXML (100% accurate)'
+      : s.source === 'manual' ? '✍ Manual Entry (100% accurate)'
+      : '🤖 AI Extraction (dual-pass verified)';
     let html = `<div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:16px;">
       <div style="font-size:0.88rem;color:var(--gold);font-weight:500;">Key: ${escapeHtml(s.tonic || s.key || '?')} major — Do = ${escapeHtml(s.tonic || '?')}</div>
-      <div style="font-size:0.78rem;color:var(--muted);">${escapeHtml(s.measures.length.toString())} measures · ${escapeHtml(s.clef || 'treble')} clef</div>`;
+      <div style="font-size:0.78rem;color:var(--muted);">${escapeHtml(s.measures.length.toString())} measures · ${escapeHtml(s.clef || 'treble')} clef</div>
+      <div style="font-size:0.68rem;padding:3px 10px;background:${s.source === 'musicxml' || s.source === 'manual' ? 'rgba(82,183,136,0.1);border:1px solid rgba(82,183,136,0.25);color:var(--success)' : 'rgba(139,127,212,0.1);border:1px solid rgba(139,127,212,0.25);color:var(--violet)'};border-radius:20px;">${sourceLabel}</div>`;
     if (disagreements > 0) {
       html += `<div style="font-size:0.72rem;padding:3px 10px;background:rgba(212,168,83,0.1);border:1px solid rgba(212,168,83,0.25);border-radius:20px;color:var(--gold)">⚠ ${disagreements} measure${disagreements > 1 ? 's' : ''} had extraction disagreement — review marked measures</div>`;
     }
