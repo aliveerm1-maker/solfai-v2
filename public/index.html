@@ -2253,7 +2253,7 @@ function autocorrelationPitch(buffer, sampleRate) {
 
   for (let i = 0; i < SIZE; i++) rms += buffer[i] * buffer[i];
   rms = Math.sqrt(rms / SIZE);
-  if (rms < 0.01) return -1; // Too quiet
+  if (rms < 0.005) return -1; // Too quiet — lowered threshold for sensitivity
 
   let lastCorrelation = 1;
   for (let offset = 0; offset < MAX_SAMPLES; offset++) {
@@ -2263,7 +2263,7 @@ function autocorrelationPitch(buffer, sampleRate) {
     }
     correlation = 1 - (correlation / MAX_SAMPLES);
     correlations[offset] = correlation;
-    if (correlation > 0.9 && correlation > lastCorrelation) {
+    if (correlation > 0.8 && correlation > lastCorrelation) {
       foundGoodCorrelation = true;
       if (correlation > bestCorrelation) {
         bestCorrelation = correlation;
@@ -2271,9 +2271,12 @@ function autocorrelationPitch(buffer, sampleRate) {
       }
     } else if (foundGoodCorrelation) {
       // Parabolic interpolation for sub-sample accuracy
-      const shift = (correlations[bestOffset + 1] - correlations[bestOffset - 1]) /
-                    (2 * (2 * correlations[bestOffset] - correlations[bestOffset - 1] - correlations[bestOffset + 1]));
-      return sampleRate / (bestOffset + shift);
+      if (bestOffset > 0 && bestOffset < MAX_SAMPLES - 1) {
+        const shift = (correlations[bestOffset + 1] - correlations[bestOffset - 1]) /
+                      (2 * (2 * correlations[bestOffset] - correlations[bestOffset - 1] - correlations[bestOffset + 1]));
+        return sampleRate / (bestOffset + shift);
+      }
+      return sampleRate / bestOffset;
     }
     lastCorrelation = correlation;
   }
@@ -2291,11 +2294,11 @@ async function togglePitchDetection() {
 
 async function startPitchDetection() {
   try {
-    pitchStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true }, video: false });
+    pitchStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: true }, video: false });
     pitchAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
     pitchAnalyser = pitchAudioCtx.createAnalyser();
-    pitchAnalyser.fftSize = 2048;
-    pitchAnalyser.smoothingTimeConstant = 0.8;
+    pitchAnalyser.fftSize = 4096;
+    pitchAnalyser.smoothingTimeConstant = 0.85;
     const source = pitchAudioCtx.createMediaStreamSource(pitchStream);
     source.connect(pitchAnalyser);
 
