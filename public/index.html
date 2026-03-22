@@ -547,9 +547,10 @@
 <nav>
   <div class="nav-logo">Solfai</div>
   <ul class="nav-links">
-    <li><a href="#home">Home</a></li>
-    <li><a href="#how">How it works</a></li>
-    <li><a href="#about">About</a></li>
+    <li><a href="#analyze">Analyze</a></li>
+    <li><a href="#practice-section" onclick="scrollToSection('practice-section')">Practice</a></li>
+    <li><a href="#vocal-coach" onclick="scrollToSection('vocal-coach')">Vocal Coach</a></li>
+    <li><a href="#pitch-guide-section" onclick="scrollToSection('pitch-guide-section')">Pitch Guide</a></li>
     <li><a href="#analyze" class="nav-cta">Try it →</a></li>
   </ul>
   <div class="nav-right">
@@ -652,9 +653,6 @@
       <button class="tab-btn" onclick="showTab('practice', this)" data-tab-index="4">💡 Practice Tips</button>
       <button class="tab-btn" onclick="showTab('composer', this)" data-tab-index="5">🎼 Composer</button>
       <button class="tab-btn" onclick="showTab('pronunciation', this)" data-tab-index="6">🗣 Pronunciation</button>
-      <button class="tab-btn" onclick="showTab('pitchguide', this)" data-tab-index="7">🎤 Pitch Guide</button>
-      <button class="tab-btn" onclick="showTab('vocalcoach', this)" data-tab-index="8">🎙 Vocal Coach</button>
-      <button class="tab-btn" onclick="showTab('practicemode', this)" data-tab-index="9">🎯 Practice Mode</button>
     </div>
 
     <div id="tab-overview" class="tab-content active">
@@ -685,145 +683,6 @@
       <div id="pronunciationBox"></div>
     </div>
 
-    <!-- PITCH GUIDE TAB -->
-    <div id="tab-pitchguide" class="tab-content">
-      <div class="pitch-guide-section">
-        <div class="pitch-guide-hint">
-          🎤 <strong>Real-time pitch detection.</strong> Click <em>Start Listening</em>, sing your starting note, and see how close you are. Green = in tune (±15 cents), Yellow = close (±30 cents), Red = off (>30 cents).
-          <br/><span style="color:var(--muted);font-size:0.8rem;">Requires microphone permission. Works best in a quiet room.</span>
-        </div>
-        <div class="pitch-guide-controls">
-          <button class="btn-mic" id="btnStartPitchDetect" onclick="togglePitchDetection()">
-            <span id="micBtnIcon">🎤</span> <span id="micBtnText">Start Listening</span>
-          </button>
-          <div class="pitch-target-display" id="pitchTargetDisplay" style="display:none">
-            <div>
-              <div class="pitch-target-label">Target Note</div>
-              <div class="pitch-target-note" id="pitchTargetNote">—</div>
-            </div>
-            <div style="color:var(--border);font-size:1.5rem;">|</div>
-            <div>
-              <div class="pitch-target-label">Your Note</div>
-              <div class="pitch-target-note" id="pitchDetectedNote" style="color:var(--text)">—</div>
-            </div>
-          </div>
-        </div>
-        <div class="pitch-gauge-container" id="pitchGaugeContainer">
-          <div class="pitch-gauge-title">Pitch Accuracy Meter</div>
-          <div class="pitch-needle-wrap">
-            <svg class="pitch-gauge-svg" id="pitchGaugeSvg" viewBox="0 0 280 160">
-              <!-- Background arc -->
-              <path d="M 20 145 A 120 120 0 0 1 260 145" fill="none" stroke="#252535" stroke-width="18" stroke-linecap="round"/>
-              <!-- Red zones -->
-              <path d="M 20 145 A 120 120 0 0 1 62 52" fill="none" stroke="rgba(224,92,92,0.4)" stroke-width="18" stroke-linecap="round"/>
-              <path d="M 218 52 A 120 120 0 0 1 260 145" fill="none" stroke="rgba(224,92,92,0.4)" stroke-width="18" stroke-linecap="round"/>
-              <!-- Yellow zones -->
-              <path d="M 62 52 A 120 120 0 0 1 95 22" fill="none" stroke="rgba(212,168,83,0.4)" stroke-width="18" stroke-linecap="round"/>
-              <path d="M 185 22 A 120 120 0 0 1 218 52" fill="none" stroke="rgba(212,168,83,0.4)" stroke-width="18" stroke-linecap="round"/>
-              <!-- Green zone -->
-              <path d="M 95 22 A 120 120 0 0 1 185 22" fill="none" stroke="rgba(82,183,136,0.5)" stroke-width="18" stroke-linecap="round"/>
-              <!-- Center mark -->
-              <line x1="140" y1="25" x2="140" y2="38" stroke="#52b788" stroke-width="3" stroke-linecap="round"/>
-              <!-- Labels -->
-              <text x="16" y="162" font-size="11" fill="#585668" text-anchor="middle">-50</text>
-              <text x="264" y="162" font-size="11" fill="#585668" text-anchor="middle">+50</text>
-              <text x="140" y="158" font-size="11" fill="#52b788" text-anchor="middle">0</text>
-              <!-- Needle -->
-              <line id="pitchNeedle" x1="140" y1="140" x2="140" y2="30" stroke="#d4a853" stroke-width="3" stroke-linecap="round" transform-origin="140 140" transform="rotate(0, 140, 140)"/>
-              <circle cx="140" cy="140" r="6" fill="#d4a853"/>
-            </svg>
-          </div>
-          <div class="pitch-detected-note" id="pitchNoteDisplay">—</div>
-          <div class="pitch-cents-display" id="pitchCentsDisplay">Waiting for input...</div>
-          <div class="pitch-status-text" id="pitchStatusText">Start listening to detect your pitch</div>
-        </div>
-        <div class="pitch-history-container">
-          <div class="pitch-history-title">Pitch History (last 10 seconds)</div>
-          <canvas class="pitch-history-canvas" id="pitchHistoryCanvas" width="600" height="100"></canvas>
-        </div>
-        <div class="practice-timer-section">
-          <div class="practice-timer-title">Session Stats</div>
-          <div class="practice-timer-stats">
-            <div class="timer-stat"><div class="timer-stat-value" id="pitchSessionTime">0:00</div><div class="timer-stat-label">Time Listening</div></div>
-            <div class="timer-stat"><div class="timer-stat-value" id="pitchAccuracyAvg">—</div><div class="timer-stat-label">Avg Accuracy</div></div>
-            <div class="timer-stat"><div class="timer-stat-value" id="pitchBestStreak">0</div><div class="timer-stat-label">Best Streak</div></div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- VOCAL COACH TAB -->
-    <div id="tab-vocalcoach" class="tab-content">
-      <div class="vocal-coach-section">
-        <div class="pitch-guide-hint">
-          🎙 <strong>Director Audio Feedback.</strong> Record yourself singing your part, then get detailed feedback from Solfai acting as a professional choir director. Works best with 5-30 seconds of singing.
-        </div>
-        <div class="record-controls">
-          <button class="btn-record" id="btnStartRecord" onclick="toggleRecording()">
-            <span id="recordBtnIcon">⏺</span> <span id="recordBtnText">Start Recording</span>
-          </button>
-          <div class="record-timer" id="recordTimer">0:00</div>
-          <button class="btn-submit-recording" id="btnSubmitRecording" onclick="submitRecording()">
-            ✨ Get Director Feedback
-          </button>
-        </div>
-        <div class="coach-evaluating" id="coachEvaluating">
-          <div class="mini-spinner" style="border-top-color:var(--gold)"></div>
-          <span>Solfai is listening to your performance...</span>
-        </div>
-        <div class="coach-scores" id="coachScores">
-          <div class="coach-score-rings" id="coachScoreRings"></div>
-          <div class="coach-feedback-box">
-            <div class="coach-feedback-title">Director's Feedback</div>
-            <div class="coach-feedback-text" id="coachFeedbackText"></div>
-          </div>
-          <div class="coach-feedback-title" style="font-size:0.7rem;text-transform:uppercase;letter-spacing:2px;color:var(--violet);margin-bottom:10px;">Action Items</div>
-          <div class="coach-actions" id="coachActions"></div>
-        </div>
-        <div id="coachHistorySection" style="display:none">
-          <div style="font-size:0.7rem;text-transform:uppercase;letter-spacing:2px;color:var(--muted);margin-bottom:12px;margin-top:20px;">Past Recordings</div>
-          <div class="coach-history-list" id="coachHistoryList"></div>
-        </div>
-      </div>
-    </div>
-
-    <!-- PRACTICE MODE TAB -->
-    <div id="tab-practicemode" class="tab-content">
-      <div class="practice-mode-section">
-        <div class="pitch-guide-hint">
-          🎯 <strong>Practice Mode.</strong> Work through your part measure by measure. Play each measure, then practice it yourself. Navigate with arrow keys or buttons. Load solfege first in the Solfege tab.
-        </div>
-        <div class="practice-controls">
-          <button class="btn-practice-start" id="btnStartPractice" onclick="startPracticeMode()" disabled>
-            ▶ Start Practice Mode
-          </button>
-          <div id="practiceLoadHint" style="font-size:0.82rem;color:var(--muted)">Generate Solfege first (Solfege tab), then return here.</div>
-        </div>
-        <div class="practice-progress-bar" id="practiceProgressBar" style="display:none">
-          <div class="progress-bar-label">
-            <span class="progress-bar-text" id="practiceProgressText">Measure 1 of 1</span>
-            <span class="progress-bar-streak" id="practiceStreakText">🔥 0 streak</span>
-          </div>
-          <div class="progress-bar-track"><div class="progress-bar-fill" id="practiceProgressFill" style="width:0%"></div></div>
-        </div>
-        <div class="practice-loading" id="practiceLoading">
-          <div class="mini-spinner" style="border-top-color:var(--gold);width:24px;height:24px;border-width:3px;margin:0 auto 12px"></div>
-          Loading solfege data...
-        </div>
-        <div class="practice-measure-card" id="practiceMeasureCard">
-          <div class="practice-measure-num" id="practiceMeasureNum">Measure 1</div>
-          <div class="practice-solfege-display" id="practiceSolfegeDisplay">Do Re Mi</div>
-          <div class="practice-notes-display" id="practiceNotesDisplay"></div>
-          <div class="practice-lyrics-display" id="practiceLyricsDisplay"></div>
-          <div class="practice-measure-controls">
-            <button class="btn-prev-measure" id="btnPrevMeasure" onclick="prevMeasure()">← Prev</button>
-            <button class="btn-play-measure" onclick="playCurrentMeasure()">🎹 Play Notes</button>
-            <button class="btn-next-measure" id="btnNextMeasure" onclick="nextMeasure()">Next →</button>
-          </div>
-        </div>
-        <canvas id="confettiCanvas" class="confetti-canvas"></canvas>
-      </div>
-    </div>
   </div>
 
   <div class="chat-section" id="chatSection">
@@ -859,7 +718,152 @@
   </div>
 </section>
 
-<section id="about">
+<!-- ═══ PRACTICE SECTION ══════════════════════════════════ -->
+<section id="practice-section" style="padding:80px 24px 60px;max-width:900px;margin:0 auto;">
+  <div class="section-label">Measure by Measure</div>
+  <h2 class="section-title">Practice Mode</h2>
+  <div class="practice-mode-section">
+    <div class="pitch-guide-hint">
+      🎯 <strong>Practice Mode.</strong> Work through your part measure by measure. Play each measure with the piano, then sing it yourself. Load Solfege first in the Analyze section above.
+    </div>
+    <div class="practice-controls">
+      <button class="btn-practice-start" id="btnStartPractice" onclick="startPracticeMode()" disabled>
+        ▶ Start Practice Mode
+      </button>
+      <div id="practiceLoadHint" style="font-size:0.82rem;color:var(--muted)">Analyze a piece and generate Solfege first, then come back here.</div>
+    </div>
+    <div class="practice-progress-bar" id="practiceProgressBar" style="display:none">
+      <div class="progress-bar-label">
+        <span class="progress-bar-text" id="practiceProgressText">Measure 1 of 1</span>
+        <span class="progress-bar-streak" id="practiceStreakText">🔥 0 streak</span>
+      </div>
+      <div class="progress-bar-track"><div class="progress-bar-fill" id="practiceProgressFill" style="width:0%"></div></div>
+    </div>
+    <div class="practice-loading" id="practiceLoading">
+      <div class="mini-spinner" style="border-top-color:var(--gold);width:24px;height:24px;border-width:3px;margin:0 auto 12px"></div>
+      Loading solfege data...
+    </div>
+    <div class="practice-measure-card" id="practiceMeasureCard">
+      <div class="practice-measure-num" id="practiceMeasureNum">Measure 1</div>
+      <div class="practice-solfege-display" id="practiceSolfegeDisplay">Do Re Mi</div>
+      <div class="practice-notes-display" id="practiceNotesDisplay"></div>
+      <div class="practice-lyrics-display" id="practiceLyricsDisplay"></div>
+      <div id="practiceConfidenceNote" style="display:none;font-size:0.72rem;color:var(--gold);margin-bottom:16px;padding:4px 12px;background:rgba(212,168,83,0.1);border-radius:20px;display:inline-block"></div>
+      <div class="practice-measure-controls">
+        <button class="btn-prev-measure" id="btnPrevMeasure" onclick="prevMeasure()">← Prev</button>
+        <button class="btn-play-measure" onclick="playCurrentMeasure()">🎹 Play Notes</button>
+        <button class="btn-next-measure" id="btnNextMeasure" onclick="nextMeasure()">Next →</button>
+      </div>
+    </div>
+    <canvas id="confettiCanvas" class="confetti-canvas"></canvas>
+  </div>
+</section>
+
+<!-- ═══ VOCAL COACH SECTION ══════════════════════════════ -->
+<section id="vocal-coach" style="padding:80px 24px 60px;max-width:900px;margin:0 auto;border-top:1px solid var(--border);">
+  <div class="section-label">Director Feedback</div>
+  <h2 class="section-title">Vocal Coach</h2>
+  <div class="vocal-coach-section">
+    <div class="pitch-guide-hint">
+      🎙 <strong>Director Audio Feedback.</strong> Record yourself singing your part, then get detailed feedback from Solfai acting as a professional choir director. Works best with 5–30 seconds of clear singing.
+    </div>
+    <div class="record-controls">
+      <button class="btn-record" id="btnStartRecord" onclick="toggleRecording()">
+        <span id="recordBtnIcon">⏺</span> <span id="recordBtnText">Start Recording</span>
+      </button>
+      <div class="record-timer" id="recordTimer">0:00</div>
+      <button class="btn-submit-recording" id="btnSubmitRecording" onclick="submitRecording()">
+        ✨ Get Director Feedback
+      </button>
+    </div>
+    <div class="coach-evaluating" id="coachEvaluating">
+      <div class="mini-spinner" style="border-top-color:var(--gold)"></div>
+      <span>Solfai is listening to your performance...</span>
+    </div>
+    <div class="coach-scores" id="coachScores">
+      <div class="coach-score-rings" id="coachScoreRings"></div>
+      <div class="coach-feedback-box">
+        <div class="coach-feedback-title">Director's Feedback</div>
+        <div class="coach-feedback-text" id="coachFeedbackText"></div>
+      </div>
+      <div class="coach-feedback-title" style="font-size:0.7rem;text-transform:uppercase;letter-spacing:2px;color:var(--violet);margin-bottom:10px;">Action Items</div>
+      <div class="coach-actions" id="coachActions"></div>
+      <div style="margin-top:20px;">
+        <button onclick="resetCoach()" style="padding:10px 24px;background:var(--card);border:1px solid var(--border);color:var(--text2);border-radius:12px;cursor:pointer;font-family:'Outfit',sans-serif;font-size:0.88rem;transition:all 0.2s;" onmouseover="this.style.borderColor='var(--gold)';this.style.color='var(--gold)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text2)'">
+          🔄 Try Again
+        </button>
+      </div>
+    </div>
+    <div id="coachHistorySection" style="display:none">
+      <div style="font-size:0.7rem;text-transform:uppercase;letter-spacing:2px;color:var(--muted);margin-bottom:12px;margin-top:20px;">Past Recordings</div>
+      <div class="coach-history-list" id="coachHistoryList"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ PITCH GUIDE SECTION ═══════════════════════════════ -->
+<section id="pitch-guide-section" style="padding:80px 24px 80px;max-width:900px;margin:0 auto;border-top:1px solid var(--border);">
+  <div class="section-label">Real-Time Detection</div>
+  <h2 class="section-title">Pitch Guide</h2>
+  <div class="pitch-guide-section">
+    <div class="pitch-guide-hint">
+      🎤 <strong>Real-time pitch detection.</strong> Click <em>Start Listening</em>, sing your starting note, and see how close you are. Green = in tune (±15 cents), Yellow = close (±30 cents), Red = off.
+      <br/><span style="color:var(--muted);font-size:0.8rem;">Requires microphone permission. Works best in a quiet room.</span>
+    </div>
+    <div class="pitch-guide-controls">
+      <button class="btn-mic" id="btnStartPitchDetect" onclick="togglePitchDetection()">
+        <span id="micBtnIcon">🎤</span> <span id="micBtnText">Start Listening</span>
+      </button>
+      <div class="pitch-target-display" id="pitchTargetDisplay" style="display:none">
+        <div>
+          <div class="pitch-target-label">Target Note</div>
+          <div class="pitch-target-note" id="pitchTargetNote">—</div>
+        </div>
+        <div style="color:var(--border);font-size:1.5rem;">|</div>
+        <div>
+          <div class="pitch-target-label">Your Note</div>
+          <div class="pitch-target-note" id="pitchDetectedNote" style="color:var(--text)">—</div>
+        </div>
+      </div>
+    </div>
+    <div class="pitch-gauge-container" id="pitchGaugeContainer">
+      <div class="pitch-gauge-title">Pitch Accuracy Meter</div>
+      <div class="pitch-needle-wrap">
+        <svg class="pitch-gauge-svg" id="pitchGaugeSvg" viewBox="0 0 280 160">
+          <path d="M 20 145 A 120 120 0 0 1 260 145" fill="none" stroke="#252535" stroke-width="18" stroke-linecap="round"/>
+          <path d="M 20 145 A 120 120 0 0 1 62 52" fill="none" stroke="rgba(224,92,92,0.4)" stroke-width="18" stroke-linecap="round"/>
+          <path d="M 218 52 A 120 120 0 0 1 260 145" fill="none" stroke="rgba(224,92,92,0.4)" stroke-width="18" stroke-linecap="round"/>
+          <path d="M 62 52 A 120 120 0 0 1 95 22" fill="none" stroke="rgba(212,168,83,0.4)" stroke-width="18" stroke-linecap="round"/>
+          <path d="M 185 22 A 120 120 0 0 1 218 52" fill="none" stroke="rgba(212,168,83,0.4)" stroke-width="18" stroke-linecap="round"/>
+          <path d="M 95 22 A 120 120 0 0 1 185 22" fill="none" stroke="rgba(82,183,136,0.5)" stroke-width="18" stroke-linecap="round"/>
+          <line x1="140" y1="25" x2="140" y2="38" stroke="#52b788" stroke-width="3" stroke-linecap="round"/>
+          <text x="16" y="162" font-size="11" fill="#585668" text-anchor="middle">-50</text>
+          <text x="264" y="162" font-size="11" fill="#585668" text-anchor="middle">+50</text>
+          <text x="140" y="158" font-size="11" fill="#52b788" text-anchor="middle">0</text>
+          <line id="pitchNeedle" x1="140" y1="140" x2="140" y2="30" stroke="#d4a853" stroke-width="3" stroke-linecap="round" transform-origin="140 140" transform="rotate(0, 140, 140)"/>
+          <circle cx="140" cy="140" r="6" fill="#d4a853"/>
+        </svg>
+      </div>
+      <div class="pitch-detected-note" id="pitchNoteDisplay">—</div>
+      <div class="pitch-cents-display" id="pitchCentsDisplay">Waiting for input...</div>
+      <div class="pitch-status-text" id="pitchStatusText">Start listening to detect your pitch</div>
+    </div>
+    <div class="pitch-history-container">
+      <div class="pitch-history-title">Pitch History (last 10 seconds)</div>
+      <canvas class="pitch-history-canvas" id="pitchHistoryCanvas" width="600" height="100"></canvas>
+    </div>
+    <div class="practice-timer-section">
+      <div class="practice-timer-title">Session Stats</div>
+      <div class="practice-timer-stats">
+        <div class="timer-stat"><div class="timer-stat-value" id="pitchSessionTime">0:00</div><div class="timer-stat-label">Time Listening</div></div>
+        <div class="timer-stat"><div class="timer-stat-value" id="pitchAccuracyAvg">—</div><div class="timer-stat-label">Avg Accuracy</div></div>
+        <div class="timer-stat"><div class="timer-stat-value" id="pitchBestStreak">0</div><div class="timer-stat-label">Best Streak</div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="about" style="padding:100px 24px;max-width:800px;margin:0 auto;text-align:center;border-top:1px solid var(--border);">
   <div class="section-label">The story</div>
   <p class="about-text">Solfai was built by a <em>high school choir student</em> who struggled with sight reading and couldn't find a tool that actually helped.</p>
   <p class="about-text">Most apps just play notes at you. Solfai <em>explains</em> the music to you — like having a choir director in your pocket, available any time you need to prepare.</p>
@@ -1331,120 +1335,69 @@
     }));
   }
 
-  function playTone(frequency, duration = 3.0, btn = null) {
-    if (!audioCtx) {
-      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    }
-    // Stop previous
+  function playTone(frequency, duration = 2.5, btn = null) {
+    // Stop any previous notes
     if (currentOscillator && currentOscillator.length) {
       currentOscillator.forEach(n => { try { n.stop(); } catch(_) {} });
     }
     currentOscillator = [];
 
-    const t = audioCtx.currentTime;
+    // Create fresh AudioContext per note (avoids suspended state issues)
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const masterGain = ctx.createGain();
+    const filter = ctx.createBiquadFilter();
+
+    // Low-pass filter that darkens over time (string dampening)
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(5000, ctx.currentTime);
+    filter.frequency.exponentialRampToValueAtTime(1000, ctx.currentTime + duration);
+    filter.connect(masterGain);
+    masterGain.connect(ctx.destination);
+
+    // Master envelope
+    masterGain.gain.setValueAtTime(0.4, ctx.currentTime);
+    masterGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+
+    // Harmonic series — fundamental + overtones with independent decay
+    const harmonics = [1, 2, 3, 4, 5, 6];
+    const volumes  = [1, 0.5, 0.3, 0.2, 0.1, 0.05];
     const nodes = [];
 
-    // Master compressor for clean output
-    const compressor = audioCtx.createDynamicsCompressor();
-    compressor.threshold.setValueAtTime(-12, t);
-    compressor.knee.setValueAtTime(10, t);
-    compressor.ratio.setValueAtTime(4, t);
-    compressor.connect(audioCtx.destination);
-
-    const masterGain = audioCtx.createGain();
-    masterGain.gain.setValueAtTime(0.7, t);
-    masterGain.connect(compressor);
-
-    // === PIANO STRING SIMULATION ===
-    // Each harmonic gets TWO slightly detuned oscillators (like real piano strings)
-    const partials = [
-      { ratio: 1,    amp: 1.00, decayT: 2.5  },
-      { ratio: 2,    amp: 0.50, decayT: 1.8  },
-      { ratio: 3,    amp: 0.30, decayT: 1.3  },
-      { ratio: 4,    amp: 0.18, decayT: 0.9  },
-      { ratio: 5,    amp: 0.10, decayT: 0.65 },
-      { ratio: 6,    amp: 0.06, decayT: 0.45 },
-      { ratio: 7,    amp: 0.03, decayT: 0.35 },
-    ];
-
-    partials.forEach(p => {
-      const baseFreq = frequency * p.ratio;
-      if (baseFreq > 15000) return;
-
-      // Two detuned oscillators per partial (real pianos have 2-3 strings per note)
-      for (let d = -1; d <= 1; d += 2) {
-        const osc = audioCtx.createOscillator();
-        const oscGain = audioCtx.createGain();
-
-        osc.type = 'sine';
-        // Detune by ~1.5 cents — creates the warm "chorus" effect of real piano strings
-        osc.frequency.setValueAtTime(baseFreq * (1 + d * 0.0008 * p.ratio), t);
-
-        const peakVol = p.amp * 0.22;
-
-        // Piano envelope: sharp attack → fast initial decay → slow release
-        oscGain.gain.setValueAtTime(0, t);
-        oscGain.gain.linearRampToValueAtTime(peakVol, t + 0.003);           // instant hammer strike
-        oscGain.gain.exponentialRampToValueAtTime(peakVol * 0.35, t + 0.08); // fast initial decay
-        oscGain.gain.exponentialRampToValueAtTime(peakVol * 0.15, t + 0.5);  // settle into sustain
-        oscGain.gain.exponentialRampToValueAtTime(0.001, t + p.decayT + 0.5); // slow fade out
-
-        osc.connect(oscGain);
-        oscGain.connect(masterGain);
-        osc.start(t);
-        osc.stop(t + duration);
-        nodes.push(osc);
-      }
+    harmonics.forEach((h, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = frequency * h;
+      const decayEnd = ctx.currentTime + duration * (1 - i * 0.12);
+      gain.gain.setValueAtTime(volumes[i] * 0.3, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, Math.max(decayEnd, ctx.currentTime + 0.05));
+      osc.connect(gain);
+      gain.connect(filter);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + duration);
+      nodes.push(osc);
     });
 
-    // === HAMMER STRIKE (percussive transient) ===
-    const strikeLen = 0.06;
-    const strikeRate = audioCtx.sampleRate;
-    const strikeBuf = audioCtx.createBuffer(1, strikeRate * strikeLen, strikeRate);
-    const strikeData = strikeBuf.getChannelData(0);
-    for (let i = 0; i < strikeData.length; i++) {
-      // Shaped noise burst — exponential decay within the buffer itself
-      const env = Math.exp(-i / (strikeRate * 0.008));
-      strikeData[i] = (Math.random() * 2 - 1) * env;
+    // Hammer strike — short noise burst for attack transient
+    const noiseBuffer = ctx.createBuffer(1, ctx.sampleRate * 0.02, ctx.sampleRate);
+    const noiseData = noiseBuffer.getChannelData(0);
+    for (let i = 0; i < noiseData.length; i++) {
+      noiseData[i] = (Math.random() * 2 - 1) * 0.3;
     }
-    const strikeNode = audioCtx.createBufferSource();
-    strikeNode.buffer = strikeBuf;
-
-    // Filter the strike to sound woody/felt, not harsh
-    const strikeBPF = audioCtx.createBiquadFilter();
-    strikeBPF.type = 'bandpass';
-    strikeBPF.frequency.setValueAtTime(Math.min(frequency * 3, 6000), t);
-    strikeBPF.Q.setValueAtTime(1.2, t);
-
-    const strikeGain = audioCtx.createGain();
-    strikeGain.gain.setValueAtTime(0.35, t);
-    strikeGain.gain.exponentialRampToValueAtTime(0.001, t + strikeLen);
-
-    strikeNode.connect(strikeBPF);
-    strikeBPF.connect(strikeGain);
-    strikeGain.connect(masterGain);
-    strikeNode.start(t);
-    nodes.push(strikeNode);
-
-    // === BODY RESONANCE (gives fullness like a real piano soundboard) ===
-    const bodyOsc = audioCtx.createOscillator();
-    const bodyGain = audioCtx.createGain();
-    bodyOsc.type = 'sine';
-    bodyOsc.frequency.setValueAtTime(frequency, t);
-    bodyGain.gain.setValueAtTime(0.08, t);
-    bodyGain.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
-    // Slight lowpass to warm it
-    const bodyLP = audioCtx.createBiquadFilter();
-    bodyLP.type = 'lowpass';
-    bodyLP.frequency.setValueAtTime(frequency * 2, t);
-    bodyOsc.connect(bodyLP);
-    bodyLP.connect(bodyGain);
-    bodyGain.connect(masterGain);
-    bodyOsc.start(t);
-    bodyOsc.stop(t + 0.3);
-    nodes.push(bodyOsc);
+    const noiseSource = ctx.createBufferSource();
+    noiseSource.buffer = noiseBuffer;
+    const noiseGain = ctx.createGain();
+    noiseGain.gain.setValueAtTime(0.15, ctx.currentTime);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.05);
+    noiseSource.connect(noiseGain);
+    noiseGain.connect(masterGain);
+    noiseSource.start(ctx.currentTime);
+    nodes.push(noiseSource);
 
     currentOscillator = nodes;
+
+    // Close context after note finishes (prevents resource leak)
+    setTimeout(() => { try { ctx.close(); } catch(_) {} }, (duration + 0.5) * 1000);
 
     if (btn) {
       btn.classList.add('playing');
@@ -1688,26 +1641,100 @@
   }
 
   // ─── Solfege ──────────────────────────────────────────────
+  let _solfegeStructured = null; // store structured data for practice mode + corrections
+
   async function loadSolfege() {
     document.getElementById('solfegeBtn').style.display = 'none';
     document.getElementById('solfegeLoading').classList.add('show');
     try {
       const data = await callAPI([], 'solfege');
       document.getElementById('solfegeLoading').classList.remove('show');
-      // Render solfege as formatted cards instead of raw pre text
       const outputEl = document.getElementById('solfegeOutput');
-      outputEl.innerHTML = renderSolfegeOutput(data.text);
+
+      // Store raw text for backward-compat parsers
+      if (data.text) outputEl.setAttribute('data-raw-text', data.text);
+
+      if (data.structured && data.structured.measures && data.structured.measures.length) {
+        _solfegeStructured = data.structured;
+        outputEl.innerHTML = renderSolfegeStructured(data.structured);
+        // Also populate practice mode data directly
+        practiceData = data.structured.measures.map(m => ({
+          num: String(m.num),
+          notes: m.notes || [],
+          solfege: m.solfege || [],
+          lyrics: m.lyrics || '',
+          confidence: m.confidence || 'medium',
+          disagreement: m.disagreement || false,
+        }));
+        enablePracticeMode();
+      } else if (data.text) {
+        _solfegeStructured = null;
+        outputEl.innerHTML = renderSolfegeOutput(data.text);
+      } else {
+        throw new Error('No solfege data returned');
+      }
       outputEl.classList.add('show');
-    } catch {
+    } catch (err) {
       document.getElementById('solfegeLoading').classList.remove('show');
-      document.getElementById('solfegeOutput').textContent = 'Could not generate solfege. Please try again.';
-      document.getElementById('solfegeOutput').classList.add('show');
+      const outputEl = document.getElementById('solfegeOutput');
+      outputEl.textContent = 'Could not generate solfege: ' + (err.message || 'please try again.');
+      outputEl.classList.add('show');
     }
+  }
+
+  // Render structured solfege JSON as nice measure cards with note-above / solfege-below layout
+  function renderSolfegeStructured(s) {
+    const disagreements = s.measures.filter(m => m.disagreement).length;
+    let html = `<div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:16px;">
+      <div style="font-size:0.88rem;color:var(--gold);font-weight:500;">Key: ${escapeHtml(s.tonic || s.key || '?')} major — Do = ${escapeHtml(s.tonic || '?')}</div>
+      <div style="font-size:0.78rem;color:var(--muted);">${escapeHtml(s.measures.length.toString())} measures · ${escapeHtml(s.clef || 'treble')} clef</div>`;
+    if (disagreements > 0) {
+      html += `<div style="font-size:0.72rem;padding:3px 10px;background:rgba(212,168,83,0.1);border:1px solid rgba(212,168,83,0.25);border-radius:20px;color:var(--gold)">⚠ ${disagreements} measure${disagreements > 1 ? 's' : ''} had extraction disagreement — review marked measures</div>`;
+    }
+    html += '</div>';
+
+    html += '<div style="display:flex;flex-direction:column;gap:10px;">';
+    for (const m of s.measures) {
+      const borderColor = m.disagreement ? 'rgba(212,168,83,0.5)' : 'var(--border)';
+      html += `<div class="solfege-measure-card" data-measure="${m.num}" style="background:var(--card);border:1px solid ${borderColor};border-radius:12px;padding:16px 20px;">`;
+      html += `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">`;
+      html += `<span style="font-size:0.7rem;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);">Measure ${escapeHtml(String(m.num))}</span>`;
+      if (m.disagreement) html += `<span style="font-size:0.68rem;color:var(--gold);padding:2px 8px;background:rgba(212,168,83,0.1);border-radius:20px;">⚠ reviewed</span>`;
+      else if (m.confidence === 'high') html += `<span style="font-size:0.68rem;color:var(--success);padding:2px 8px;background:rgba(82,183,136,0.1);border-radius:20px;">✓ confident</span>`;
+      html += `<button onclick="editMeasureSolfege(${m.num})" title="Correct this measure" style="background:none;border:none;color:var(--muted);font-size:0.7rem;cursor:pointer;padding:2px 8px;border-radius:4px;transition:color 0.2s;" onmouseover="this.style.color='var(--gold)'" onmouseout="this.style.color='var(--muted)'">✏ edit</button>`;
+      html += '</div>';
+
+      // Note-above / solfege-below layout
+      const notes = m.notes || [];
+      const solfege = m.solfege || [];
+      if (notes.length) {
+        html += '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:flex-end;margin-bottom:8px;">';
+        for (let i = 0; i < Math.max(notes.length, solfege.length); i++) {
+          const note = notes[i] || '';
+          const sol = solfege[i] || '?';
+          const isQuestion = sol === '?';
+          html += `<div style="display:flex;flex-direction:column;align-items:center;gap:2px;min-width:32px;">`;
+          html += `<div style="font-size:0.72rem;color:var(--muted);font-family:monospace;">${escapeHtml(note)}</div>`;
+          html += `<div style="font-family:'Cormorant Garamond',serif;font-size:1.15rem;font-weight:700;color:${isQuestion ? 'var(--error)' : 'var(--text)'};letter-spacing:0.5px;">${escapeHtml(sol)}</div>`;
+          html += '</div>';
+        }
+        html += '</div>';
+      }
+
+      if (m.lyrics) {
+        html += `<div style="font-size:0.85rem;color:var(--violet);font-style:italic;padding-top:6px;border-top:1px solid var(--border);">${escapeHtml(m.lyrics)}</div>`;
+      }
+      if (m.disagreement && m.alt_notes) {
+        html += `<div style="font-size:0.72rem;color:var(--muted);margin-top:8px;">Alt reading: ${escapeHtml((m.alt_notes || []).join(' '))}</div>`;
+      }
+      html += '</div>';
+    }
+    html += '</div>';
+    return html;
   }
 
   function renderSolfegeOutput(text) {
     if (!text) return '<p style="color:var(--muted)">No solfege data available.</p>';
-    // Parse the structured text output from server
     const lines = text.split('\n');
     let html = '';
     let inMeasure = false;
@@ -1727,7 +1754,6 @@
     for (const line of lines) {
       const trimmed = line.trim();
       if (!trimmed) continue;
-
       if (trimmed.startsWith('Key:') || trimmed.startsWith('Staff:')) {
         html += `<div style="font-size:0.85rem;color:var(--gold);margin-bottom:14px;font-weight:500;">${escapeHtml(trimmed)}</div>`;
       } else if (/^m\.\d+:/.test(trimmed)) {
@@ -1750,6 +1776,36 @@
     }
     flushMeasure();
     return html || `<pre style="white-space:pre-wrap;">${escapeHtml(text)}</pre>`;
+  }
+
+  // Edit a measure's solfege manually — inline correction
+  function editMeasureSolfege(measureNum) {
+    if (!_solfegeStructured) return;
+    const m = _solfegeStructured.measures.find(x => String(x.num) === String(measureNum));
+    if (!m) return;
+    const current = (m.solfege || []).join(' ');
+    const corrected = prompt(`Measure ${measureNum} — edit solfege syllables (space-separated):\nCurrent: ${current || '(none)'}\n\nSeparate syllables with spaces. Use: Do Di Re Ri Me Mi Fa Fi Sol Si La Li Te Ti`, current);
+    if (corrected === null) return;
+    m.solfege = corrected.trim().split(/\s+/).filter(Boolean);
+    m.confidence = 'high'; // User corrected = high confidence
+    m.disagreement = false;
+
+    // Update practice data too
+    const pIdx = practiceData.findIndex(x => String(x.num) === String(measureNum));
+    if (pIdx >= 0) practiceData[pIdx].solfege = m.solfege;
+
+    // Re-render
+    document.getElementById('solfegeOutput').innerHTML = renderSolfegeStructured(_solfegeStructured);
+
+    // Save correction to server if we have a hash
+    const imgHash = currentAnalysis?._imageHash;
+    if (imgHash) {
+      fetch('/api/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: 'correct', imageHash: imgHash, field: `solfege_m${measureNum}`, value: corrected.trim() })
+      }).catch(() => {});
+    }
   }
 
   // ─── Rhythm ─────────────────────────────────────────────
@@ -1838,10 +1894,23 @@
     if (!res.ok) {
       const t = await res.text();
       let msg = `Server error (${res.status})`;
-      try { const d = JSON.parse(t); if (d.error) msg = d.error; } catch(_) {}
+      try {
+        const d = JSON.parse(t);
+        if (d.error) msg = d.error;
+      } catch(_) {}
+      // Client-side friendly messages for common status codes
+      if (res.status === 429) msg = 'The AI is busy right now. Please wait 30 seconds and try again.';
+      else if (res.status === 503) msg = 'The AI service is temporarily overloaded. Please try again in a minute.';
+      else if (res.status === 408 || res.status === 504) msg = 'The request timed out. Try again, or use a smaller/clearer image.';
       throw new Error(msg);
     }
-    return await res.json(); // Returns { text } or { structured, text }
+    return await res.json();
+  }
+
+  // ─── Nav section scroll ─────────────────────────────────
+  function scrollToSection(id) {
+    const el = document.getElementById(id);
+    if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
   }
 
   function fillQ(q) { document.getElementById('chatEmpty')?.remove(); chatInput.value = q; chatInput.focus(); }
@@ -2375,6 +2444,18 @@ function renderCoachHistory() {
 }
 
 function showHistoryScore(i) { if (coachHistory[i]) renderCoachScores(coachHistory[i]); }
+
+function resetCoach() {
+  recordedChunks = [];
+  document.getElementById('coachScores').classList.remove('show');
+  document.getElementById('coachEvaluating').classList.remove('show');
+  document.getElementById('btnSubmitRecording').classList.remove('show');
+  document.getElementById('recordTimer').textContent = '0:00';
+  const icon = document.getElementById('recordBtnIcon');
+  const text = document.getElementById('recordBtnText');
+  if (icon) icon.textContent = '⏺';
+  if (text) text.textContent = 'Start Recording';
+}
 
 // Init coach history on load
 renderCoachHistory();

@@ -386,7 +386,7 @@ app.post('/api/analyze', async (req, res) => {
     const imageParts = buildImageParts(imageBase64, imageMime, pdfPages);
     if (!imageParts.length) return res.status(400).json({ error: 'No image provided' });
 
-    console.log(`[Solfai v5] mode=${mode}, part=${part}, parts=${imageParts.length}, mime=${imageMime || 'jpeg'}`);
+    console.log(`[Solfai v7] mode=${mode}, part=${part}, parts=${imageParts.length}, mime=${imageMime || 'jpeg'}`);
 
     switch (mode) {
       case 'analyze': return await handleAnalyze(res, apiKey, imageParts, part, imageBase64, pdfPages);
@@ -398,7 +398,18 @@ app.post('/api/analyze', async (req, res) => {
     }
   } catch (err) {
     console.error('Handler error:', err.message);
-    return res.status(500).json({ error: err.message || 'Internal server error' });
+    let userError = err.message || 'Internal server error';
+    // User-friendly error messages
+    if (userError.includes('429') || userError.toLowerCase().includes('quota') || userError.toLowerCase().includes('rate limit')) {
+      userError = 'The AI is busy right now. Please wait 30 seconds and try again.';
+    } else if (userError.includes('503') || userError.toLowerCase().includes('overloaded')) {
+      userError = 'The AI service is temporarily overloaded. Please try again in a minute.';
+    } else if (userError.includes('401') || userError.toLowerCase().includes('api key')) {
+      userError = 'API key error. Please contact support.';
+    } else if (userError.toLowerCase().includes('no image') || userError.toLowerCase().includes('no response')) {
+      userError = 'Could not read the image. Try uploading a clearer photo with better lighting.';
+    }
+    return res.status(500).json({ error: userError });
   }
 });
 
@@ -627,12 +638,10 @@ function buildTextSummary(s, part) {
   ].filter(Boolean).join('\n');
 }
 
-// ─── SOLFEGE (decomposed into 3 calls + code solfege) ─────
-// FIX BUG7: Staff ID now sends all pages
-// FIX BUG8: Images now preprocessed
+// ─── SOLFEGE v7: Parallel dual-extraction + self-consistency + structured JSON ─
 async function handleSolfege(res, apiKey, imageParts, part) {
 
-  // FIX BUG8: Preprocess images for solfege too
+  // Preprocess images
   const processedParts = [];
   for (const p of imageParts.slice(0, 4)) {
     if (p.inlineData?.mimeType === 'image/jpeg') {
@@ -645,65 +654,152 @@ async function handleSolfege(res, apiKey, imageParts, part) {
     }
   }
 
-  // Step 1: Staff identification — FIX BUG7: send all pages, not just page 1
+  // Step 1: Staff identification
   const staffRaw = await callGemini(apiKey,
-    `You are reading sheet music. Count the staves on this page. Which staff number (counting from the top, starting at 1) has lyrics text written below it?
+    `You are reading sheet music. Which staff number (counting from the top, starting at 1) has lyrics text written below it?
 For SATB: Soprano=staff 1 (top treble), Alto=staff 2 (bottom treble), Tenor=staff 3 (treble-8 or bass), Bass=staff 4 (bottom bass).
 For TB choir: Tenor=staff 1 (treble-8 clef has small 8 below), Bass=staff 2 (bass clef).
-Skip title/cover pages with no staves.
-Output ONLY JSON: {"vocal_staff_number": N, "total_staves": M, "clef": "treble/bass/treble-8", "part_confirmed": "${part}"}`,
-    [{ text: `Identify the ${part} vocal staff number.` }, ...processedParts],
-    { temperature: 0, maxOutputTokens: 256, thinkingBudget: 2000 }
+Skip title/cover pages.
+Output ONLY JSON: {"vocal_staff_number": N, "total_staves": M, "clef": "treble" or "bass" or "treble-8", "part_confirmed": "${part}"}`,
+    [{ text: `Identify the ${part} vocal staff.` }, ...processedParts],
+    { temperature: 0, maxOutputTokens: 256, thinkingBudget: 1500 }
   );
 
-  let staffInfo;
+  let staffInfo = { vocal_staff_number: 1, total_staves: 1, clef: 'treble' };
   try { staffInfo = JSON.parse(staffRaw.replace(/```json?|```/gi, '').trim()); }
-  catch (_) { staffInfo = { vocal_staff_number: 1 }; }
+  catch (_) {}
 
-  // Step 2: Note + lyric extraction
-  const noteSystemPrompt = `You are reading sheet music with extreme precision.
-Focus ONLY on staff #${staffInfo.vocal_staff_number} from the top (the ${part} vocal staff with lyrics).
-For each visible measure, list:
-- The note letter names with octave (e.g., 'C4', 'Bb4', 'F#5')
-- The exact lyric syllable printed below each note
-Skip title/cover pages. Use [?] for notes you cannot read clearly.
-Be thorough — include ALL measures visible across ALL pages.`;
+  const clefRef = staffInfo.clef === 'bass'
+    ? `BASS CLEF reference — Lines bottom→top: G2 B2 D3 F3 A3 (Good Boys Do Fine Always). Spaces bottom→top: A2 C3 E3 G3 (All Cows Eat Grass).`
+    : staffInfo.clef === 'treble-8'
+    ? `TREBLE-8 CLEF (all pitches one octave LOWER than standard treble) — Lines: E3 G3 B3 D4 F4. Spaces: F3 A3 C4 E4. Used for Tenor voices.`
+    : `TREBLE CLEF reference — Lines bottom→top: E4 G4 B4 D5 F5 (Every Good Boy Does Fine). Spaces bottom→top: F4 A4 C5 E5 (FACE).
+A note ON a line has the line passing through the CENTER of the note head.
+A note IN a space has the note head sitting BETWEEN two lines, not touching either.
+CRITICAL: The 3rd line is B4, the 3rd space is C5 — these are adjacent and look close. The 3rd line has the line through the head; the 3rd space sits between lines 3 and 4.`;
 
-  const noteRaw = await callGemini(apiKey, noteSystemPrompt,
-    [{ text: `Extract all notes and lyrics for ${part} (staff #${staffInfo.vocal_staff_number}). Output ONLY JSON.` }, ...processedParts],
-    { temperature: 0, maxOutputTokens: 12288, thinkingBudget: 8000 }
-  );
+  const outputFormat = `Output ONLY a JSON array of measure objects, no other text. Each object: {"num": 1, "notes": ["C4","D4","E4"], "lyrics": "glo-ri-a"}
+Rules:
+- Include accidentals: Bb4, F#4, Eb5 (use letter + accidental + octave)
+- Key signature accidentals apply to ALL notes of that pitch class in the piece unless cancelled
+- Accidentals in the measure apply until cancelled by a natural sign
+- Use [?] for any note you cannot read clearly
+- Include ALL visible measures across ALL pages, even if lyrics are missing
+- If a measure has tied notes, include each distinct pitch once
+- Vocal range check: Soprano C4-G5, Alto G3-E5, Tenor C3-A4, Bass E2-E4 — flag anything outside this with [?]`;
 
-  let noteData;
-  try {
-    noteData = JSON.parse(noteRaw.replace(/```json?|```/gi, '').trim());
-  } catch (e) {
-    return res.status(200).json({ text: noteRaw });
-  }
+  const sysBase = `You are a professional music copyist with 20 years of experience transcribing choral music.
+You are looking at staff #${staffInfo.vocal_staff_number} from the top — the ${part} vocal part.
+${clefRef}
+${outputFormat}`;
 
-  // Step 3: Code-calculated solfege
-  const tonic = (noteData.tonic || noteData.key?.split(' ')[0] || 'C').replace(/\s+/g, '');
-  let output = `Key: ${noteData.key || 'Unknown'} (Do = ${tonic})\n`;
-  output += `Staff: ${part} (staff #${staffInfo.vocal_staff_number} of ${staffInfo.total_staves})\n\n`;
+  const sysVerify = `You are double-checking a music transcription for accuracy.
+You are looking at staff #${staffInfo.vocal_staff_number} from the top — the ${part} vocal part.
+${clefRef}
+Read EVERY note twice before writing it. Pay special attention to:
+- Notes near the middle of the staff where line/space is easiest to confuse
+- Accidentals from key signature vs. natural signs
+- Octave numbers (does this note look higher or lower than the one before it?)
+${outputFormat}`;
 
-  if (noteData.measures?.length) {
-    for (const m of noteData.measures) {
-      const notes = m.notes || [];
-      const solfege = notes.map(n =>
-        n === '[?]' ? '?' : noteToSolfege(n.replace(/\d+$/, ''), tonic)
-      );
-      const noteStr = notes.join(' ');
-      const solStr = solfege.join(' ');
-      output += `m.${m.num}:\n`;
-      output += `  Notes:   ${noteStr}\n`;
-      output += `  Solfege: ${solStr}\n`;
-      output += `  Lyrics:  "${m.lyrics || ''}"\n\n`;
+  // Step 2: Run TWO note extractions in PARALLEL (self-consistency)
+  const [ext1Raw, ext2Raw] = await Promise.all([
+    callGemini(apiKey, sysBase,
+      [{ text: `Extract all notes for ${part} (staff #${staffInfo.vocal_staff_number}), measure by measure. JSON array only.` }, ...processedParts],
+      { temperature: 0, maxOutputTokens: 8192, thinkingBudget: 6000 }
+    ),
+    callGemini(apiKey, sysVerify,
+      [{ text: `Verification pass — carefully re-read each note for ${part} (staff #${staffInfo.vocal_staff_number}). JSON array only.` }, ...processedParts],
+      { temperature: 0, maxOutputTokens: 8192, thinkingBudget: 6000 }
+    ),
+  ]);
+
+  // Parse an extraction response into a measure array
+  function parseExtraction(raw) {
+    try {
+      const cleaned = raw.replace(/```json?|```/gi, '').trim();
+      const parsed = JSON.parse(cleaned);
+      if (Array.isArray(parsed)) return parsed;
+      if (Array.isArray(parsed.measures)) return parsed.measures;
+      return [];
+    } catch (_) {
+      const match = raw.match(/\[[\s\S]*\]/);
+      if (match) { try { return JSON.parse(match[0]); } catch (_) {} }
+      return [];
     }
-  } else {
-    output += 'No measures could be extracted. Try uploading a clearer image.';
   }
 
-  return res.status(200).json({ text: output });
+  // Extract tonic from raw JSON text
+  function extractTonic(raw) {
+    const m = raw.match(/"(?:tonic|key)"\s*:\s*"([A-Ga-g][#b♯♭]?)(?:\s+(?:major|minor))?"/);
+    return m ? m[1] : null;
+  }
+
+  const measures1 = parseExtraction(ext1Raw);
+  const measures2 = parseExtraction(ext2Raw);
+  const tonic = extractTonic(ext1Raw) || extractTonic(ext2Raw) || 'C';
+
+  // Step 3: Reconcile both extractions measure by measure
+  const maxLen = Math.max(measures1.length, measures2.length);
+  const reconciledMeasures = [];
+
+  for (let i = 0; i < maxLen; i++) {
+    const m1 = measures1[i];
+    const m2 = measures2[i];
+
+    if (!m1 && m2) {
+      reconciledMeasures.push({ ...m2, confidence: 'medium' });
+    } else if (m1 && !m2) {
+      reconciledMeasures.push({ ...m1, confidence: 'medium' });
+    } else {
+      const n1 = (m1.notes || []).join(',').toLowerCase();
+      const n2 = (m2.notes || []).join(',').toLowerCase();
+      const agree = n1 === n2;
+      reconciledMeasures.push({
+        num: m1.num ?? (i + 1),
+        notes: m1.notes || [],
+        lyrics: m1.lyrics || m2.lyrics || '',
+        confidence: agree ? 'high' : 'medium',
+        disagreement: !agree,
+        alt_notes: agree ? null : (m2.notes || []),
+      });
+    }
+  }
+
+  // Step 4: Code-calculate solfege (never trust AI for this)
+  const VALID_SOLFEGE = new Set(['Do','Di','Re','Ri','Me','Mi','Fa','Fi','Sol','Si','La','Li','Te','Ti','?']);
+  for (const m of reconciledMeasures) {
+    m.solfege = (m.notes || []).map(n =>
+      n === '[?]' ? '?' : noteToSolfege(n.replace(/\d+$/, ''), tonic)
+    );
+    m.valid = m.solfege.every(s => VALID_SOLFEGE.has(s));
+  }
+
+  // Build legacy text output (for backward compatibility with practice mode parser)
+  let textOutput = `Key: ${tonic} (Do = ${tonic})\nStaff: ${part} (staff #${staffInfo.vocal_staff_number} of ${staffInfo.total_staves || 1})\n\n`;
+  for (const m of reconciledMeasures) {
+    textOutput += `m.${m.num}:\n`;
+    textOutput += `  Notes:   ${(m.notes || []).join(' ')}\n`;
+    textOutput += `  Solfege: ${(m.solfege || []).join(' ')}\n`;
+    textOutput += `  Lyrics:  "${m.lyrics || ''}"\n\n`;
+  }
+
+  if (!reconciledMeasures.length) {
+    textOutput += 'No measures could be extracted. Try uploading a clearer image.';
+  }
+
+  return res.status(200).json({
+    structured: {
+      key: tonic,
+      tonic,
+      staffNum: staffInfo.vocal_staff_number,
+      totalStaves: staffInfo.total_staves || 1,
+      clef: staffInfo.clef || 'treble',
+      measures: reconciledMeasures,
+      disagreements: reconciledMeasures.filter(m => m.disagreement).length,
+    },
+    text: textOutput,
+  });
 }
 
 // ─── RHYTHM ───────────────────────────────────────────────
@@ -898,4 +994,4 @@ Be encouraging. Most student singers score 40-75. Only score below 30 if the rec
 });
 
 // ─── Start ────────────────────────────────────────────────
-app.listen(PORT, () => console.log(`Solfai v6 running on port ${PORT}`));
+app.listen(PORT, () => console.log(`Solfai v7 running on port ${PORT}`));
