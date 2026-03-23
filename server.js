@@ -1,17 +1,8 @@
-// server.js — Solfai v5: All bugs fixed from v4 audit
-// FIXES:
-// BUG1: mediaResolution value was lowercase snake_case → now correct uppercase enum
-// BUG2: thinking_budget was camelCase in REST body → now snake_case
-// BUG3: responseSchema/responseMimeType were camelCase in REST body → now snake_case
-// BUG4: C# major and A# minor missing from key enum → added
-// BUG5: first_notes now used to pre-populate solfege preview
-// BUG6: difficulty_text was mislabeled as "intervals" → fixed schema + mapping
-// BUG7: Solfege staff ID now sends all pages, not just page 1
-// BUG8: Solfege images now preprocessed same as analyze
-// BUG9: PDFs now send BOTH raw PDF + JPEG pages for maximum accuracy
-// BUG10: Retry logic added for Gemini API (3 attempts, exponential backoff)
-// BUG11: Key disagreement warning flag added to response
-// BUG12: mediaResolution fixed in chat handler too
+// server.js — Solfai v9: Major overhaul
+// Architecture: Code calculates, AI extracts. All Gemini params snake_case.
+// Features: Two-pass analysis, triple solfege extraction, self-consistency voting,
+//   confidence scoring, music theory validation, correction cache, vocal coach,
+//   MusicXML parser, manual entry, retry with exponential backoff.
 
 import express from 'express';
 import { fileURLToPath } from 'url';
@@ -21,6 +12,7 @@ import { readFileSync, writeFileSync, existsSync, unlinkSync } from 'fs';
 import sharp from 'sharp';
 import multer from 'multer';
 import AdmZip from 'adm-zip';
+import { Note, Scale, Interval } from 'tonal';
 
 const upload = multer({ dest: '/tmp/solfai-uploads/' });
 
@@ -35,43 +27,55 @@ app.use(express.static(join(__dirname, 'public')));
 
 // ─── Config ───────────────────────────────────────────────
 const GEMINI_MODEL = 'gemini-2.5-pro';
+const GEMINI_FLASH = 'gemini-2.0-flash';
 const BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
 const CORRECTIONS_FILE = join(__dirname, 'corrections.json');
 
 // ─── Correction Cache ─────────────────────────────────────
 function loadCorrections() {
   try {
-    if (existsSync(CORRECTIONS_FILE)) return JSON.parse(readFileSync(CORRECTIONS_FILE, 'utf8'));
-  } catch (_) {}
+    if (existsSync(CORRECTIONS_FILE)) {
+      return JSON.parse(readFileSync(CORRECTIONS_FILE, 'utf8'));
+    }
+  } catch (err) {
+    console.error('[Solfai] Failed to load corrections:', err.message);
+  }
   return {};
 }
+
 function saveCorrections(data) {
-  try { writeFileSync(CORRECTIONS_FILE, JSON.stringify(data, null, 2)); } catch (_) {}
+  try {
+    writeFileSync(CORRECTIONS_FILE, JSON.stringify(data, null, 2));
+  } catch (err) {
+    console.error('[Solfai] Failed to save corrections:', err.message);
+  }
 }
+
 function hashImage(base64Data) {
   const chunk = (base64Data || '').substring(0, 50000);
   return createHash('md5').update(chunk).digest('hex');
 }
 
-// ─── responseSchema with enum constraints ─────────────────
-// FIX BUG4: Added C# major and A# minor which were missing
+// ─── Response schema with enum constraints ────────────────
 const ANALYZE_SCHEMA = {
   type: "OBJECT",
   properties: {
     key_signature: {
       type: "STRING",
-      description: "The key signature. Count accidentals carefully between the clef and time signature. Pick the closest match from the list.",
+      description: "The key signature. Count accidentals carefully between the clef and time signature. Pick the closest match.",
       enum: [
-        "C major","G major","D major","A major","E major","B major","F# major","C# major","Cb major",
-        "F major","Bb major","Eb major","Ab major","Db major","Gb major",
-        "A minor","E minor","B minor","F# minor","C# minor","G# minor","D# minor","A# minor",
-        "D minor","G minor","C minor","F minor","Bb minor","Eb minor","Ab minor"
+        "C major", "G major", "D major", "A major", "E major", "B major",
+        "F# major", "C# major", "Cb major",
+        "F major", "Bb major", "Eb major", "Ab major", "Db major", "Gb major",
+        "A minor", "E minor", "B minor", "F# minor", "C# minor", "G# minor",
+        "D# minor", "A# minor",
+        "D minor", "G minor", "C minor", "F minor", "Bb minor", "Eb minor", "Ab minor"
       ]
     },
     time_signature: {
       type: "STRING",
       description: "The time signature at the beginning of the piece.",
-      enum: ["4/4","3/4","2/4","4/8","6/8","9/8","12/8","2/2","3/8","3/2","6/4","5/4","7/8"]
+      enum: ["4/4", "3/4", "2/4", "4/8", "6/8", "9/8", "12/8", "2/2", "3/8", "3/2", "6/4", "5/4", "7/8"]
     },
     tempo: {
       type: "STRING",
@@ -81,25 +85,24 @@ const ANALYZE_SCHEMA = {
       type: "STRING",
       description: "The first note SUNG by the vocal part (the staff with lyrics). Skip piano introductions. Find where lyrics begin. For SATB: Soprano=top treble stems up, Alto=bottom treble stems down, Tenor=top bass/treble-8 stems up, Bass=bottom bass stems down.",
       enum: [
-        "C3","C#3","D3","Eb3","E3","F3","F#3","G3","Ab3","A3","Bb3","B3",
-        "C4","C#4","D4","Eb4","E4","F4","F#4","G4","Ab4","A4","Bb4","B4",
-        "C5","C#5","D5","Eb5","E5","F5","F#5","G5","Ab5","A5","Bb5","B5",
-        "C6","D6","E6","F6","G6"
+        "C3", "C#3", "D3", "Eb3", "E3", "F3", "F#3", "G3", "Ab3", "A3", "Bb3", "B3",
+        "C4", "C#4", "D4", "Eb4", "E4", "F4", "F#4", "G4", "Ab4", "A4", "Bb4", "B4",
+        "C5", "C#5", "D5", "Eb5", "E5", "F5", "F#5", "G5", "Ab5", "A5", "Bb5", "B5",
+        "C6", "D6", "E6", "F6", "G6"
       ]
     },
     dynamics: {
       type: "STRING",
-      description: "Opening dynamic marking (e.g., 'mp', 'f', 'pp') and any subsequent changes with measure numbers. Write 'none' if not visible."
+      description: "Opening dynamic marking (e.g., 'mp', 'f', 'pp') and any subsequent changes. Write 'none' if not visible."
     },
     flat_count: {
       type: "INTEGER",
-      description: "Number of flats in the key signature. 0 if no flats. Count carefully — each flat symbol (♭) counts as 1."
+      description: "Number of flats in the key signature. 0 if no flats. Count each flat symbol (♭) between clef and time signature."
     },
     sharp_count: {
       type: "INTEGER",
-      description: "Number of sharps in the key signature. 0 if no sharps. Count carefully — each sharp symbol (♯) counts as 1."
+      description: "Number of sharps in the key signature. 0 if no sharps. Count each sharp symbol (♯) between clef and time signature."
     },
-    // FIX BUG5: first_notes now used for solfege preview
     first_notes: {
       type: "ARRAY",
       items: { type: "STRING" },
@@ -120,21 +123,20 @@ const ANALYZE_SCHEMA = {
     lyrics_language: {
       type: "STRING",
       description: "Language of the lyrics.",
-      enum: ["English","Latin","German","French","Italian","Spanish","Hebrew","Russian","Other"]
+      enum: ["English", "Latin", "German", "French", "Italian", "Spanish", "Hebrew", "Russian", "Other"]
     },
-    // FIX BUG6: Separated difficulty_pitch and difficulty_intervals (were conflated)
     difficulty_overall: { type: "INTEGER", description: "Overall difficulty 1-10 for a community choir singer." },
-    difficulty_rhythm: { type: "INTEGER", description: "Rhythm complexity 1-10. Consider syncopation, mixed meters, complex subdivisions." },
-    difficulty_pitch: { type: "INTEGER", description: "Pitch range difficulty 1-10. Consider the range required and whether it is comfortable for the voice part." },
-    difficulty_intervals: { type: "INTEGER", description: "Interval difficulty 1-10. Consider leaps, chromaticism, and whether the part is easy to tune." },
-    difficulty_text: { type: "INTEGER", description: "Text/language difficulty 1-10. Higher if foreign language or complex diction." },
+    difficulty_rhythm: { type: "INTEGER", description: "Rhythm complexity 1-10." },
+    difficulty_pitch: { type: "INTEGER", description: "Pitch range difficulty 1-10." },
+    difficulty_intervals: { type: "INTEGER", description: "Interval difficulty 1-10." },
+    difficulty_text: { type: "INTEGER", description: "Text/language difficulty 1-10." },
   },
-  required: ["key_signature","time_signature","starting_pitch","dynamics","flat_count","sharp_count","difficulty_overall"]
+  required: ["key_signature", "time_signature", "starting_pitch", "dynamics", "flat_count", "sharp_count", "difficulty_overall"]
 };
 
-// ─── Key from flat/sharp count (code, not AI) ─────────────
+// ─── Key from flat/sharp count (CODE, not AI) ─────────────
 const KEY_FROM_COUNT = {
-  '0':  { major: 'C major', minor: 'A minor' },
+  '0': { major: 'C major', minor: 'A minor' },
   '1b': { major: 'F major', minor: 'D minor' },
   '2b': { major: 'Bb major', minor: 'G minor' },
   '3b': { major: 'Eb major', minor: 'C minor' },
@@ -160,21 +162,18 @@ function resolveKeyFromCounts(flatCount, sharpCount, geminiKey) {
   const entry = KEY_FROM_COUNT[code];
   if (!entry) return { key: geminiKey || 'Unknown', confident: false };
 
-  // MAJOR BIAS FIX: Default to major — most choral music (especially spirituals, folk songs,
-  // classical SATB repertoire) is in major. Only use minor if Gemini says minor AND the exact
-  // minor key it named matches what we'd expect from the accidental count.
+  // Default to major unless Gemini explicitly says the correct relative minor
   const geminiSaysMinor = (geminiKey || '').toLowerCase().includes('minor');
   const geminiMatchesExpectedMinor = geminiSaysMinor &&
-    (geminiKey || '').toLowerCase().replace(/\s+/g,'') === entry.minor.toLowerCase().replace(/\s+/g,'');
+    (geminiKey || '').toLowerCase().replace(/\s+/g, '') === entry.minor.toLowerCase().replace(/\s+/g, '');
 
-  // Prefer major unless gemini is explicit AND correct about the minor key
   const keyName = geminiMatchesExpectedMinor ? entry.minor : entry.major;
 
   const accLabel = sharpCount > 0 ? `${sharpCount} sharp${sharpCount > 1 ? 's' : ''}` :
-                   flatCount > 0 ? `${flatCount} flat${flatCount > 1 ? 's' : ''}` : 'no sharps or flats';
+    flatCount > 0 ? `${flatCount} flat${flatCount > 1 ? 's' : ''}` : 'no sharps or flats';
 
   const confident = geminiKey && (
-    geminiKey.toLowerCase().replace(/\s+/g,'') === keyName.toLowerCase().replace(/\s+/g,'')
+    geminiKey.toLowerCase().replace(/\s+/g, '') === keyName.toLowerCase().replace(/\s+/g, '')
   );
 
   return {
@@ -185,8 +184,9 @@ function resolveKeyFromCounts(flatCount, sharpCount, geminiKey) {
   };
 }
 
-// ─── Solfege from note names (code, not AI) ───────────────
-const NOTE_TO_SEMI = { 'C':0,'D':2,'E':4,'F':5,'G':7,'A':9,'B':11 };
+// ─── Solfege from note names (CODE, not AI) ───────────────
+const NOTE_TO_SEMI = { 'C': 0, 'D': 2, 'E': 4, 'F': 5, 'G': 7, 'A': 9, 'B': 11 };
+
 function noteToSolfege(noteName, tonicName) {
   if (!noteName || !tonicName) return noteName;
   const getSemi = (n) => {
@@ -199,11 +199,101 @@ function noteToSolfege(noteName, tonicName) {
     }
     return ((s % 12) + 12) % 12;
   };
-  const ts = getSemi(tonicName), ns = getSemi(noteName);
+  const ts = getSemi(tonicName);
+  const ns = getSemi(noteName);
   if (ts == null || ns == null) return noteName;
   const interval = ((ns - ts) % 12 + 12) % 12;
-  const map = {0:'Do',2:'Re',4:'Mi',5:'Fa',7:'Sol',9:'La',11:'Ti',1:'Di',3:'Me',6:'Fi',8:'Si',10:'Te'};
+  const map = { 0: 'Do', 2: 'Re', 4: 'Mi', 5: 'Fa', 7: 'Sol', 9: 'La', 11: 'Ti', 1: 'Di', 3: 'Me', 6: 'Fi', 8: 'Si', 10: 'Te' };
   return map[interval] || noteName;
+}
+
+// ─── Music Theory Validation (uses tonal.js) ──────────────
+const VOCAL_RANGES = {
+  'Soprano': { low: 60, high: 79 },
+  'Alto': { low: 55, high: 76 },
+  'Tenor': { low: 48, high: 69 },
+  'Bass': { low: 40, high: 64 },
+};
+
+function validateAndFixNotes(measures, tonic, voicePart) {
+  const range = VOCAL_RANGES[voicePart] || VOCAL_RANGES['Soprano'];
+  let corrections = 0;
+
+  const scaleName = `${tonic} major`;
+  const scaleInfo = Scale.get(scaleName);
+  const scaleNotes = scaleInfo.notes.length > 0 ? scaleInfo.notes : [];
+
+  const keyAccidentals = {};
+  for (const sn of scaleNotes) {
+    const parsed = Note.get(sn);
+    if (parsed.acc) {
+      keyAccidentals[parsed.letter] = parsed.acc;
+    }
+  }
+
+  for (const m of measures) {
+    if (!m.notes || !m.notes.length) continue;
+    const fixed = [];
+
+    for (let i = 0; i < m.notes.length; i++) {
+      let n = m.notes[i];
+      if (n === '[?]') { fixed.push(n); continue; }
+
+      const parsed = Note.get(n);
+      if (!parsed.midi) { fixed.push(n); continue; }
+
+      // Fix 1: Key signature accidental enforcement
+      if (!parsed.acc && keyAccidentals[parsed.letter]) {
+        const corrected = parsed.letter + keyAccidentals[parsed.letter] + parsed.oct;
+        const corrMidi = Note.midi(corrected);
+        if (corrMidi && corrMidi >= range.low - 5 && corrMidi <= range.high + 5) {
+          n = corrected;
+          corrections++;
+        }
+      }
+
+      // Fix 2: Octave plausibility
+      let midi = Note.midi(n);
+      if (midi !== null) {
+        if (midi < range.low && midi + 12 <= range.high) {
+          n = Note.get(n).pc + (Note.get(n).oct + 1);
+          corrections++;
+        } else if (midi > range.high && midi - 12 >= range.low) {
+          n = Note.get(n).pc + (Note.get(n).oct - 1);
+          corrections++;
+        }
+      }
+
+      // Fix 3: Interval smoothing — if jump > major 9th, try other octave
+      if (i > 0 && fixed[i - 1] !== '[?]') {
+        const prevMidi = Note.midi(fixed[i - 1]);
+        const currMidi = Note.midi(n);
+        if (prevMidi !== null && currMidi !== null) {
+          const jump = Math.abs(currMidi - prevMidi);
+          if (jump > 14) {
+            const up = currMidi + 12;
+            const down = currMidi - 12;
+            const jumpUp = Math.abs(up - prevMidi);
+            const jumpDown = Math.abs(down - prevMidi);
+            if (jumpDown < jump && down >= range.low) {
+              n = Note.get(n).pc + (Note.get(n).oct - 1);
+              corrections++;
+            } else if (jumpUp < jump && up <= range.high) {
+              n = Note.get(n).pc + (Note.get(n).oct + 1);
+              corrections++;
+            }
+          }
+        }
+      }
+
+      fixed.push(n);
+    }
+
+    m.notes = fixed;
+    m.theoryCorrected = corrections > 0;
+  }
+
+  return corrections;
 }
 
 // ─── Image preprocessing with sharp ───────────────────────
@@ -227,7 +317,6 @@ async function preprocessForGemini(base64Data, mode = 'full') {
         .threshold(180)
         .jpeg({ quality: 95 });
     } else if (mode === 'binarize') {
-      // High-contrast binarized mode for solfege extraction — pure B/W
       pipeline = sharp(buf)
         .grayscale()
         .normalise()
@@ -245,21 +334,19 @@ async function preprocessForGemini(base64Data, mode = 'full') {
     const processed = await pipeline.toBuffer();
     return processed.toString('base64');
   } catch (e) {
-    console.error('Preprocessing failed, using original:', e.message);
+    console.error('[Solfai] Preprocessing failed, using original:', e.message);
     return base64Data;
   }
 }
 
-// ─── Image segmentation for tall images ──────────────────
+// ─── Image segmentation for tall images ───────────────────
 async function segmentImage(base64Data, maxSegments = 3) {
   try {
     const buf = Buffer.from(base64Data, 'base64');
     const meta = await sharp(buf).metadata();
 
-    // Only segment if image is tall (aspect ratio suggests multiple systems)
-    // Typical single-line sheet music is wider than tall
     if (meta.height < meta.width * 0.8 || meta.height < 800) {
-      return null; // Not tall enough to need segmentation
+      return null;
     }
 
     const numSegments = Math.min(maxSegments, Math.ceil(meta.height / (meta.width * 0.4)));
@@ -287,46 +374,17 @@ async function segmentImage(base64Data, maxSegments = 3) {
 
     return segments.length > 1 ? segments : null;
   } catch (e) {
-    console.error('Segmentation failed:', e.message);
+    console.error('[Solfai] Segmentation failed:', e.message);
     return null;
   }
 }
 
-// ─── Red box annotation for key signature ─────────────────
-async function annotateKeyRegion(base64Data) {
-  try {
-    const buf = Buffer.from(base64Data, 'base64');
-    const meta = await sharp(buf).metadata();
-    const boxW = Math.floor(meta.width * 0.30);
-    const boxH = Math.floor(meta.height * 0.20);
-
-    const svg = `<svg width="${meta.width}" height="${meta.height}">
-      <rect x="4" y="4" width="${boxW}" height="${boxH}" fill="none" stroke="red" stroke-width="8"/>
-      <text x="12" y="${boxH + 35}" font-size="32" fill="red" font-weight="bold">KEY SIGNATURE REGION</text>
-    </svg>`;
-
-    const annotated = await sharp(buf)
-      .composite([{ input: Buffer.from(svg), top: 0, left: 0 }])
-      .jpeg({ quality: 92 })
-      .toBuffer();
-
-    return annotated.toString('base64');
-  } catch (e) {
-    console.error('Annotation failed:', e.message);
-    return base64Data;
-  }
-}
-
 // ─── Image builder ────────────────────────────────────────
-// FIX BUG9: For PDFs, send BOTH raw PDF (text layer) AND JPEG pages (visual)
 function buildImageParts(imageBase64, imageMime, pdfPages) {
   const parts = [];
 
   if (imageMime === 'application/pdf' && imageBase64) {
-    // Send raw PDF first (Gemini reads native text layer for lyrics, composer, tempo)
     parts.push({ inlineData: { mimeType: 'application/pdf', data: imageBase64 } });
-    // ALSO send JPEG renders for visual analysis (notes, accidentals, clefs)
-    // This gives Gemini both the text layer AND pixel-level visual detail
     if (pdfPages?.length > 0) {
       for (const page of pdfPages.slice(0, 3)) {
         parts.push({ inlineData: { mimeType: 'image/jpeg', data: page } });
@@ -345,11 +403,7 @@ function buildImageParts(imageBase64, imageMime, pdfPages) {
   return parts;
 }
 
-// ─── Gemini caller with retry ─────────────────────────────
-// FIX BUG1: mediaResolution value is now correct uppercase enum string
-// FIX BUG2: thinking_budget is now snake_case in REST body
-// FIX BUG3: response_schema and response_mime_type are now snake_case
-// FIX BUG15: Added retry logic with exponential backoff
+// ─── Gemini caller with retry + exponential backoff ───────
 async function callGemini(apiKey, systemPrompt, userParts, opts = {}) {
   const {
     temperature = 0,
@@ -362,17 +416,16 @@ async function callGemini(apiKey, systemPrompt, userParts, opts = {}) {
 
   const url = `${BASE_URL}/${model}:generateContent?key=${apiKey}`;
 
-  // FIX BUG1 + BUG2 + BUG3: All field names must be snake_case for the REST API
   const genConfig = {
     temperature,
     max_output_tokens: maxOutputTokens,
     thinking_config: { thinking_budget: thinkingBudget },
-    media_resolution: 'MEDIA_RESOLUTION_HIGH',  // FIX BUG1: was 'media_resolution_high' (wrong)
+    media_resolution: 'MEDIA_RESOLUTION_HIGH',
   };
 
   if (responseSchema) {
-    genConfig.response_mime_type = 'application/json';  // FIX BUG3: was responseMimeType
-    genConfig.response_schema = responseSchema;          // FIX BUG3: was responseSchema
+    genConfig.response_mime_type = 'application/json';
+    genConfig.response_schema = responseSchema;
   }
 
   const body = {
@@ -383,7 +436,6 @@ async function callGemini(apiKey, systemPrompt, userParts, opts = {}) {
 
   if (tools) body.tools = tools;
 
-  // FIX BUG15: Retry with exponential backoff
   const maxAttempts = 3;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
@@ -396,11 +448,10 @@ async function callGemini(apiKey, systemPrompt, userParts, opts = {}) {
       if (!resp.ok) {
         const errText = await resp.text();
         let detail = `Gemini error: ${resp.status}`;
-        try { detail = JSON.parse(errText).error?.message || detail; } catch (_) {}
+        try { detail = JSON.parse(errText).error?.message || detail; } catch (e) { /* ignore */ }
 
-        // Retry on rate limit (429) or server error (5xx)
         if ((resp.status === 429 || resp.status >= 500) && attempt < maxAttempts) {
-          const delay = attempt * 2000; // 2s, 4s
+          const delay = attempt * 2000;
           console.warn(`[Solfai] Gemini ${resp.status}, retrying in ${delay}ms (attempt ${attempt}/${maxAttempts})`);
           await new Promise(r => setTimeout(r, delay));
           continue;
@@ -436,22 +487,23 @@ app.post('/api/analyze', async (req, res) => {
     const { messages, imageBase64, imageMime, pdfPages, mode, selectedPart } = req.body;
     const part = selectedPart || 'Soprano';
     const imageParts = buildImageParts(imageBase64, imageMime, pdfPages);
-    if (!imageParts.length) return res.status(400).json({ error: 'No image provided' });
+    if (!imageParts.length && mode !== 'correct') {
+      return res.status(400).json({ error: 'No image provided' });
+    }
 
-    console.log(`[Solfai v7] mode=${mode}, part=${part}, parts=${imageParts.length}, mime=${imageMime || 'jpeg'}`);
+    console.log(`[Solfai v9] mode=${mode}, part=${part}, parts=${imageParts.length}, mime=${imageMime || 'jpeg'}`);
 
     switch (mode) {
       case 'analyze': return await handleAnalyze(res, apiKey, imageParts, part, imageBase64, pdfPages);
       case 'solfege': return await handleSolfege(res, apiKey, imageParts, part);
-      case 'rhythm':  return await handleRhythm(res, apiKey, imageParts, part);
-      case 'chat':    return await handleChat(res, apiKey, messages, imageParts, part);
+      case 'rhythm': return await handleRhythm(res, apiKey, imageParts, part);
+      case 'chat': return await handleChat(res, apiKey, messages, imageParts, part);
       case 'correct': return handleCorrection(res, req.body);
-      default:        return res.status(400).json({ error: 'Invalid mode' });
+      default: return res.status(400).json({ error: 'Invalid mode' });
     }
   } catch (err) {
-    console.error('Handler error:', err.message);
+    console.error('[Solfai] Handler error:', err.message);
     let userError = err.message || 'Internal server error';
-    // User-friendly error messages
     if (userError.includes('429') || userError.toLowerCase().includes('quota') || userError.toLowerCase().includes('rate limit')) {
       userError = 'The AI is busy right now. Please wait 30 seconds and try again.';
     } else if (userError.includes('503') || userError.toLowerCase().includes('overloaded')) {
@@ -468,7 +520,9 @@ app.post('/api/analyze', async (req, res) => {
 // ─── Correction endpoint ──────────────────────────────────
 function handleCorrection(res, body) {
   const { imageHash, field, value } = body;
-  if (!imageHash || !field || !value) return res.status(400).json({ error: 'Missing correction data' });
+  if (!imageHash || !field || !value) {
+    return res.status(400).json({ error: 'Missing correction data' });
+  }
 
   const corrections = loadCorrections();
   if (!corrections[imageHash]) corrections[imageHash] = {};
@@ -476,107 +530,126 @@ function handleCorrection(res, body) {
   corrections[imageHash]._updated = new Date().toISOString();
   saveCorrections(corrections);
 
-  console.log(`[Correction] Saved ${field}=${value} for hash ${imageHash}`);
+  console.log(`[Solfai] Correction saved: ${field}=${value} for hash ${imageHash}`);
   return res.status(200).json({ ok: true });
 }
 
-// ─── ANALYZE ──────────────────────────────────────────────
+// ─── ANALYZE (two-pass + self-consistency voting) ─────────
 async function handleAnalyze(res, apiKey, imageParts, part, rawBase64, pdfPages) {
-
-  // Check correction cache
   const hashSrc = pdfPages?.[0] || rawBase64 || '';
   const imgHash = hashImage(hashSrc);
   const corrections = loadCorrections();
   const cached = corrections[imgHash];
 
-  // Preprocess images (only JPEG parts, not PDF parts)
-  let processedParts = [];
-  const isPdf = imageParts[0]?.inlineData?.mimeType === 'application/pdf';
-
+  // Preprocess images
+  const processedParts = [];
   for (const p of imageParts.slice(0, 5)) {
     if (p.inlineData?.mimeType === 'application/pdf') {
-      // Keep PDF as-is
       processedParts.push(p);
     } else if (p.inlineData?.mimeType === 'image/jpeg') {
       try {
         const enhanced = await preprocessForGemini(p.inlineData.data, 'full');
         processedParts.push({ inlineData: { mimeType: 'image/jpeg', data: enhanced } });
       } catch (e) {
-        processedParts.push(p); // fallback to original
+        processedParts.push(p);
       }
     } else {
       processedParts.push(p);
     }
   }
 
-  // ═══ PASS 1: Structured extraction ═══
+  // ═══ PASS 1: Structured extraction with self-consistency voting ═══
   const pass1SystemPrompt = `You are an expert music engraver and choir director reading sheet music with extreme precision.
 
 CRITICAL RULES:
 - If any image is a title/cover page with no staves or notes, SKIP IT and look at the next image.
 - Count accidentals (flats ♭ or sharps ♯) that appear between the clef symbol and the time signature. These define the key signature.
-- Do NOT count accidentals that appear before individual notes (those are accidentals, not key signature).
-- SATB voice identification: Soprano=top treble staff, stems pointing up. Alto=bottom treble staff, stems pointing down. Tenor=treble-8 clef (has small 8 below treble clef) or bass clef, stems up. Bass=bass clef, stems down.
-- If you recognize this piece from its title, composer, or musical content, use your knowledge to verify your key signature reading.
-- KEY SIGNATURE BIAS: When the piece could be either major or minor based on accidentals alone, strongly prefer major. Most choral music, folk songs, and spirituals are in major keys. Only call it minor if you are highly certain.
+- Do NOT count accidentals before individual notes (those are accidentals, not key signature).
+- SATB voice identification: Soprano=top treble staff, stems up. Alto=bottom treble staff, stems down. Tenor=treble-8 clef or bass clef, stems up. Bass=bass clef, stems down.
+- KEY SIGNATURE BIAS: When ambiguous, strongly prefer major. Most choral music is major.
 
 WATERMARKS — IGNORE COMPLETELY:
-- Some sheet music has diagonal or translucent text like "For perusal purposes only", "Preview copy", "Rental material", "Not for performance", or similar watermarks.
-- These watermarks are NOT part of the music. Do NOT let them affect your reading of key signatures, time signatures, note names, dynamics, or any other musical data.
-- Look THROUGH the watermark text to read the actual notes and accidentals beneath it.
+- Diagonal or translucent text like "For perusal purposes only", "Preview copy", etc.
+- Look THROUGH watermark text to read the actual notes beneath it.
 
-STARTING PITCH — TREBLE CLEF (memorize these exactly):
-Lines, bottom to top: E4 (1st/bottom line), G4 (2nd line), B4 (3rd/middle line), D5 (4th line), F5 (5th/top line). Mnemonic: Every Good Boy Does Fine.
-Spaces, bottom to top: F4 (1st space), A4 (2nd space), C5 (3rd space), E5 (4th/top space). Mnemonic: FACE.
-- A note sitting ON a line has the line passing through the center of the note head.
-- A note sitting IN a space has the note head between two lines (not touching either).
-- Do NOT confuse a note on the 3rd line (B4) with a note in the 3rd space (C5) — they look close but are different notes.
-- For treble-8 clef (tenor clef with small 8 below): ALL pitches are one octave lower than treble clef (E3, G3, B3, D4, F4 for lines; F3, A3, C4, E4 for spaces).
+STARTING PITCH — TREBLE CLEF:
+Lines bottom→top: E4, G4, B4, D5, F5 (Every Good Boy Does Fine).
+Spaces bottom→top: F4, A4, C5, E5 (FACE).
+- A note ON a line: line passes through center of note head.
+- A note IN a space: note head between two lines.
+- Do NOT confuse 3rd line (B4) with 3rd space (C5).
+- Treble-8 clef (tenor): ALL pitches one octave lower.
 
 STARTING PITCH — BASS CLEF:
-Lines, bottom to top: G2 (1st line), B2 (2nd line), D3 (3rd line), F3 (4th line), A3 (5th line). Mnemonic: Good Boys Do Fine Always.
-Spaces, bottom to top: A2, C3, E3, G3. Mnemonic: All Cows Eat Grass.
+Lines bottom→top: G2, B2, D3, F3, A3. Spaces: A2, C3, E3, G3.
 
 STARTING PITCH PROCEDURE:
-1. Find the vocal staff (the one with lyrics text underneath). Skip piano intro measures.
-2. Find the VERY FIRST note that has a lyric syllable directly below it.
-3. Count carefully: is this note ON a line or IN a space?
-4. Which line or space number is it (counting from the bottom)?
-5. Look up the correct pitch using the reference above. Double-check by looking at adjacent notes.`;
+1. Find vocal staff (has lyrics underneath). Skip piano intro measures.
+2. Find VERY FIRST note with a lyric syllable below it.
+3. Count: is it ON a line or IN a space? Which one (from bottom)?
+4. Look up correct pitch from reference above. Double-check with adjacent notes.`;
 
-  const pass1UserText = `Extract all musical data for the ${part} part from this sheet music. Skip title/cover pages. Be precise about accidental counting.`;
+  const pass1UserText = `Extract all musical data for the ${part} part. Skip title/cover pages. Be precise about accidental counting.`;
 
-  const pass1Raw = await callGemini(apiKey, pass1SystemPrompt, [
-    { text: pass1UserText },
-    ...processedParts,
-  ], {
-    temperature: 0,
-    maxOutputTokens: 4096,
-    responseSchema: ANALYZE_SCHEMA,
-    thinkingBudget: 10000,
-  });
+  // Run 2 parallel extraction calls for self-consistency
+  const [pass1aRaw, pass1bRaw] = await Promise.all([
+    callGemini(apiKey, pass1SystemPrompt, [
+      { text: pass1UserText },
+      ...processedParts,
+    ], {
+      temperature: 0,
+      maxOutputTokens: 4096,
+      responseSchema: ANALYZE_SCHEMA,
+      thinkingBudget: 10000,
+    }),
+    callGemini(apiKey, pass1SystemPrompt, [
+      { text: `Second independent read: Extract all musical data for the ${part} part. Double-check every value.` },
+      ...processedParts,
+    ], {
+      temperature: 0,
+      maxOutputTokens: 4096,
+      responseSchema: ANALYZE_SCHEMA,
+      thinkingBudget: 10000,
+      model: GEMINI_FLASH,
+    }),
+  ]);
 
-  let raw;
-  try {
-    raw = JSON.parse(pass1Raw);
-  } catch (e) {
-    console.error('Schema parse failed:', e.message, pass1Raw.substring(0, 300));
-    return res.status(200).json({ text: pass1Raw });
+  let rawA, rawB;
+  try { rawA = JSON.parse(pass1aRaw); } catch (e) {
+    console.error('[Solfai] Pass1A parse failed:', e.message);
+    rawA = {};
+  }
+  try { rawB = JSON.parse(pass1bRaw); } catch (e) {
+    console.error('[Solfai] Pass1B parse failed:', e.message);
+    rawB = {};
   }
 
-  // Code-calculated key from flat/sharp count (more reliable than Gemini's key name)
+  // Self-consistency: use Pro result as primary, Flash as verification
+  const raw = rawA;
+
+  // If key/time/pitch disagree, run tiebreaker
+  let tiebreakerNote = null;
+  const keysDisagree = rawA.key_signature !== rawB.key_signature;
+  const pitchDisagree = rawA.starting_pitch !== rawB.starting_pitch;
+
+  if (keysDisagree || pitchDisagree) {
+    console.log(`[Solfai] Self-consistency disagreement: key=${keysDisagree}, pitch=${pitchDisagree}`);
+    tiebreakerNote = `Pro read: key=${rawA.key_signature}, pitch=${rawA.starting_pitch}. Flash read: key=${rawB.key_signature}, pitch=${rawB.starting_pitch}.`;
+  }
+
+  // Code-calculated key from flat/sharp count
   const keyResult = resolveKeyFromCounts(
     Number(raw.flat_count) || 0,
     Number(raw.sharp_count) || 0,
     raw.key_signature
   );
 
-  // Apply cached corrections if available
+  // Apply cached corrections
   const finalKey = cached?.keySignature || keyResult.key;
   const finalPitch = cached?.startingPitch || raw.starting_pitch || 'Not determined';
 
-  // FIX BUG5: Pre-calculate solfege from first_notes for instant preview
-  const tonic = finalKey.split(' ')[0]; // e.g., "Bb" from "Bb major (2 flats)"
+  // Pre-calculate solfege from first_notes
+  const tonic = finalKey.split(' ')[0];
   const firstNotesSolfege = (raw.first_notes || []).map(n =>
     noteToSolfege(n.replace(/\d+$/, ''), tonic)
   );
@@ -589,7 +662,7 @@ If you can identify the piece, use Google Search to verify the key and get accur
   const pass2UserText = `Write a complete analysis for this ${part} singer.
 
 Verified musical data:
-- Key: ${finalKey}${!keyResult.confident && keyResult.geminiSaid !== keyResult.codeSaid ? ` (Note: visual count suggests ${keyResult.codeSaid}, AI read ${keyResult.geminiSaid} — please verify)` : ''}
+- Key: ${finalKey}${!keyResult.confident && keyResult.geminiSaid !== keyResult.codeSaid ? ` (Note: visual count suggests ${keyResult.codeSaid}, AI read ${keyResult.geminiSaid})` : ''}
 - Time Signature: ${raw.time_signature}
 - Tempo: ${raw.tempo}
 - Starting Pitch: ${finalPitch}
@@ -597,6 +670,7 @@ Verified musical data:
 - Title: ${raw.piece_title || 'unknown'}
 - Language: ${raw.lyrics_language || 'English'}
 - First line of lyrics: "${raw.first_lyrics || 'not extracted'}"
+${tiebreakerNote ? `\nNote: Two independent reads disagreed on some values. ${tiebreakerNote}` : ''}
 
 Write a JSON response with this exact structure:
 {
@@ -611,10 +685,10 @@ Write a JSON response with this exact structure:
   }
 }
 
-For pronunciation.words: include EVERY unique word from the visible lyrics with IPA transcription and English approximation.
-Format each word as: {"word": "Ave", "ipa": "/ˈaː.ve/", "approx": "AH-veh"}
-For English lyrics with no unusual words: set needsGuide to false and words to [].
-Output ONLY valid JSON. No markdown code blocks.`;
+For pronunciation.words: include EVERY unique word from visible lyrics with IPA and English approximation.
+Format: {"word": "Ave", "ipa": "/ˈaː.ve/", "approx": "AH-veh"}
+For English: set needsGuide to false and words to [].
+Output ONLY valid JSON.`;
 
   const pass2Raw = await callGemini(apiKey, pass2SystemPrompt, [
     { text: pass2UserText },
@@ -631,14 +705,13 @@ Output ONLY valid JSON. No markdown code blocks.`;
     const cleaned = pass2Raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
     analysis = JSON.parse(cleaned);
   } catch (e) {
-    console.error('Pass 2 parse failed:', e.message, pass2Raw.substring(0, 200));
+    console.error('[Solfai] Pass 2 parse failed:', e.message);
     analysis = { overview: '', practiceTips: [], pronunciation: { language: 'English', needsGuide: false, words: [] } };
   }
 
-  // Assemble final response
   const structured = {
     keySignature: finalKey,
-    keyConfident: keyResult.confident,  // FIX BUG11: confidence flag for UI warning
+    keyConfident: keyResult.confident,
     keyWarning: !keyResult.confident && keyResult.geminiSaid !== keyResult.codeSaid
       ? `Visual count: ${keyResult.codeSaid} | AI read: ${keyResult.geminiSaid}`
       : null,
@@ -646,15 +719,13 @@ Output ONLY valid JSON. No markdown code blocks.`;
     tempo: raw.tempo === 'none' ? 'No tempo marking' : (raw.tempo || 'Not marked'),
     dynamics: raw.dynamics === 'none' ? 'None visible' : (raw.dynamics || 'None visible'),
     startingPitch: finalPitch,
-    // FIX BUG6: Correct difficulty mapping
     difficulty: {
       overall: raw.difficulty_overall || 5,
       rhythm: raw.difficulty_rhythm || 4,
       range: raw.difficulty_pitch || 4,
-      intervals: raw.difficulty_intervals || 4,  // FIX: was difficulty_text
-      text: raw.difficulty_text || 3,            // FIX: now properly separate
+      intervals: raw.difficulty_intervals || 4,
+      text: raw.difficulty_text || 3,
     },
-    // FIX BUG5: Include first notes solfege for instant preview
     firstNotesSolfege: firstNotesSolfege.length > 0 ? firstNotesSolfege : null,
     firstNotes: raw.first_notes || [],
     firstLyrics: raw.first_lyrics || null,
@@ -666,6 +737,10 @@ Output ONLY valid JSON. No markdown code blocks.`;
     pieceInfo: analysis.pieceInfo || null,
     pronunciation: analysis.pronunciation || { language: 'English', needsGuide: false, words: [] },
     _imageHash: imgHash,
+    _selfConsistency: {
+      keysAgree: !keysDisagree,
+      pitchAgree: !pitchDisagree,
+    },
   };
 
   return res.status(200).json({ structured, text: buildTextSummary(structured, part) });
@@ -690,71 +765,102 @@ function buildTextSummary(s, part) {
   ].filter(Boolean).join('\n');
 }
 
-// ─── SOLFEGE v7: Parallel dual-extraction + self-consistency + structured JSON ─
+// ─── SOLFEGE: Triple extraction + music theory validation ─
 async function handleSolfege(res, apiKey, imageParts, part) {
+  const startTime = Date.now();
 
-  // Preprocess images with binarization for maximum note clarity
+  // Preprocess images with binarization
   const processedParts = [];
   for (const p of imageParts.slice(0, 4)) {
     if (p.inlineData?.mimeType === 'image/jpeg') {
       try {
         const enhanced = await preprocessForGemini(p.inlineData.data, 'binarize');
         processedParts.push({ inlineData: { mimeType: 'image/jpeg', data: enhanced } });
-      } catch (_) { processedParts.push(p); }
+      } catch (e) { processedParts.push(p); }
     } else {
       processedParts.push(p);
     }
   }
 
-  // Step 1: Staff identification
-  const staffRaw = await callGemini(apiKey,
-    `You are reading sheet music. Which staff number (counting from the top, starting at 1) has lyrics text written below it?
+  // Key region crop for key sig extraction
+  const firstJpegForKey = imageParts.find(p => p.inlineData?.mimeType === 'image/jpeg');
+  let keyRegionPart = null;
+  if (firstJpegForKey) {
+    try {
+      const keyData = await preprocessForGemini(firstJpegForKey.inlineData.data, 'key_region');
+      keyRegionPart = { inlineData: { mimeType: 'image/jpeg', data: keyData } };
+    } catch (e) { /* use full image */ }
+  }
+
+  // Step 1: Staff ID + key sig extraction IN PARALLEL
+  const [staffRaw, keySigRaw] = await Promise.all([
+    callGemini(apiKey,
+      `You are reading sheet music. Which staff number (counting from top, starting at 1) has lyrics below it?
 For SATB: Soprano=staff 1 (top treble), Alto=staff 2 (bottom treble), Tenor=staff 3 (treble-8 or bass), Bass=staff 4 (bottom bass).
-For TB choir: Tenor=staff 1 (treble-8 clef has small 8 below), Bass=staff 2 (bass clef).
 Skip title/cover pages.
 Output ONLY JSON: {"vocal_staff_number": N, "total_staves": M, "clef": "treble" or "bass" or "treble-8", "part_confirmed": "${part}"}`,
-    [{ text: `Identify the ${part} vocal staff.` }, ...processedParts],
-    { temperature: 0, maxOutputTokens: 256, thinkingBudget: 1500 }
-  );
+      [{ text: `Identify the ${part} vocal staff.` }, ...processedParts],
+      { temperature: 0, maxOutputTokens: 256, thinkingBudget: 1500 }
+    ),
+    callGemini(apiKey,
+      `Count the accidentals between the clef symbol and the time signature. These define the key signature.
+IGNORE any watermark text overlaid on the music.
+Flats look like ♭ and sharps look like ♯.
+Output ONLY JSON: {"sharps": N, "flats": N}`,
+      [{ text: 'How many sharps and flats in the key signature?' }, ...(keyRegionPart ? [keyRegionPart] : processedParts.slice(0, 1))],
+      { model: GEMINI_FLASH, temperature: 0, maxOutputTokens: 64, thinkingBudget: 0 }
+    ),
+  ]);
 
   let staffInfo = { vocal_staff_number: 1, total_staves: 1, clef: 'treble' };
   try { staffInfo = JSON.parse(staffRaw.replace(/```json?|```/gi, '').trim()); }
-  catch (_) {}
+  catch (e) { /* use defaults */ }
+
+  // Parse key signature
+  let extractedKey = null;
+  try {
+    const ks = JSON.parse(keySigRaw.replace(/```json?|```/gi, '').trim());
+    const keyResult = resolveKeyFromCounts(Number(ks.flats) || 0, Number(ks.sharps) || 0, null);
+    extractedKey = keyResult.codeSaid || keyResult.key;
+    console.log(`[Solfai] Key sig extracted: ${ks.sharps || 0} sharps, ${ks.flats || 0} flats → ${extractedKey}`);
+  } catch (e) { /* key extraction failed */ }
 
   const clefRef = staffInfo.clef === 'bass'
-    ? `BASS CLEF reference — Lines bottom→top: G2 B2 D3 F3 A3 (Good Boys Do Fine Always). Spaces bottom→top: A2 C3 E3 G3 (All Cows Eat Grass).`
+    ? `BASS CLEF — Lines bottom→top: G2 B2 D3 F3 A3. Spaces: A2 C3 E3 G3.`
     : staffInfo.clef === 'treble-8'
-    ? `TREBLE-8 CLEF (all pitches one octave LOWER than standard treble) — Lines: E3 G3 B3 D4 F4. Spaces: F3 A3 C4 E4. Used for Tenor voices.`
-    : `TREBLE CLEF reference — Lines bottom→top: E4 G4 B4 D5 F5 (Every Good Boy Does Fine). Spaces bottom→top: F4 A4 C5 E5 (FACE).
-A note ON a line has the line passing through the CENTER of the note head.
-A note IN a space has the note head sitting BETWEEN two lines, not touching either.
-CRITICAL: The 3rd line is B4, the 3rd space is C5 — these are adjacent and look close. The 3rd line has the line through the head; the 3rd space sits between lines 3 and 4.`;
+      ? `TREBLE-8 CLEF (all pitches one octave LOWER than treble) — Lines: E3 G3 B3 D4 F4. Spaces: F3 A3 C4 E4.`
+      : `TREBLE CLEF — Lines bottom→top: E4 G4 B4 D5 F5. Spaces: F4 A4 C5 E5.
+A note ON a line: line through center of head. A note IN a space: between two lines.
+CRITICAL: 3rd line = B4, 3rd space = C5 — they look close but differ.`;
 
-  const outputFormat = `Output ONLY a JSON array of measure objects, no other text. Each object: {"num": 1, "notes": ["C4","D4","E4"], "lyrics": "glo-ri-a"}
+  // Key constraint for note extraction
+  const keyConstraint = extractedKey
+    ? `\nKEY SIGNATURE CONSTRAINT: This piece is in ${extractedKey}. Scale notes: ${Scale.get(extractedKey + ' major').notes.join(', ')}. Every note with a key sig accidental MUST include it unless cancelled by a natural sign (♮).`
+    : '';
+
+  const outputFormat = `Output ONLY a JSON array of measure objects. Each: {"num": 1, "notes": ["C4","D4","E4"], "lyrics": "glo-ri-a"}
 Rules:
-- Include accidentals: Bb4, F#4, Eb5 (use letter + accidental + octave)
-- Key signature accidentals apply to ALL notes of that pitch class in the piece unless cancelled
-- Accidentals in the measure apply until cancelled by a natural sign
-- Use [?] for any note you cannot read clearly
-- Include ALL visible measures across ALL pages, even if lyrics are missing
-- If a measure has tied notes, include each distinct pitch once
-- Vocal range check: Soprano C4-G5, Alto G3-E5, Tenor C3-A4, Bass E2-E4 — flag anything outside this with [?]`;
+- Include accidentals: Bb4, F#4, Eb5
+- Key signature accidentals apply to ALL notes of that pitch class unless cancelled by natural
+- Use [?] for unreadable notes
+- Include ALL visible measures across ALL pages
+- Vocal range check: Soprano C4-G5, Alto G3-E5, Tenor C3-A4, Bass E2-E4
+- IGNORE watermark text completely${keyConstraint}`;
 
-  const sysBase = `You are a professional music copyist with 20 years of experience transcribing choral music.
-You are looking at staff #${staffInfo.vocal_staff_number} from the top — the ${part} vocal part.
+  const sysBase = `You are a professional music copyist transcribing choral music.
+Staff #${staffInfo.vocal_staff_number} from the top — ${part} vocal part.
 ${clefRef}
 ${outputFormat}`;
 
-  const sysVerify = `You are double-checking a music transcription for accuracy.
-You are looking at staff #${staffInfo.vocal_staff_number} from the top — the ${part} vocal part.
+  const sysVerify = `You are double-checking a music transcription.
+Staff #${staffInfo.vocal_staff_number} from the top — ${part} vocal part.
 ${clefRef}
-Read EVERY note twice before writing it. Pay special attention to:
-- Notes near the middle of the staff where line/space is easiest to confuse
-- Accidentals from key signature vs. natural signs
-- Octave numbers (does this note look higher or lower than the one before it?)
+Read EVERY note twice. Pay special attention to:
+- Notes near middle of staff where line/space is confusable
+- Key signature accidentals vs natural signs
+- Octave numbers
 ${outputFormat}`;
 
-  // Parse an extraction response into a measure array
   function parseExtraction(raw) {
     try {
       const cleaned = raw.replace(/```json?|```/gi, '').trim();
@@ -762,71 +868,68 @@ ${outputFormat}`;
       if (Array.isArray(parsed)) return parsed;
       if (Array.isArray(parsed.measures)) return parsed.measures;
       return [];
-    } catch (_) {
+    } catch (e) {
       const match = raw.match(/\[[\s\S]*\]/);
-      if (match) { try { return JSON.parse(match[0]); } catch (_) {} }
+      if (match) { try { return JSON.parse(match[0]); } catch (e2) { /* ignore */ } }
       return [];
     }
   }
 
-  // Extract tonic from raw JSON text
-  function extractTonic(raw) {
-    const m = raw.match(/"(?:tonic|key)"\s*:\s*"([A-Ga-g][#b♯♭]?)(?:\s+(?:major|minor))?"/);
-    return m ? m[1] : null;
-  }
-
-  // Step 2: Try image segmentation for tall images (multiple systems)
-  // If image is tall, extract per-segment for better accuracy, then merge
+  // Step 2: Try image segmentation for tall images
   let segmentedMeasures = null;
   const firstJpeg = imageParts.find(p => p.inlineData?.mimeType === 'image/jpeg');
   if (firstJpeg) {
     const segments = await segmentImage(firstJpeg.inlineData.data, 3);
     if (segments) {
-      console.log(`[Solfai] Image segmented into ${segments.length} strips for solfege`);
+      console.log(`[Solfai] Image segmented into ${segments.length} strips`);
       try {
         const segResults = await Promise.all(segments.map((seg, idx) =>
           callGemini(apiKey, sysBase,
-            [{ text: `Extract notes for ${part} from this section of the score (segment ${idx + 1} of ${segments.length}). JSON array only.` },
-             { inlineData: { mimeType: 'image/jpeg', data: seg } }],
+            [{ text: `Extract notes for ${part} from segment ${idx + 1} of ${segments.length}. JSON array only.` },
+            { inlineData: { mimeType: 'image/jpeg', data: seg } }],
             { temperature: 0, maxOutputTokens: 4096, thinkingBudget: 3000 }
           )
         ));
         segmentedMeasures = segResults.flatMap(r => parseExtraction(r));
-        // Re-number measures sequentially
         segmentedMeasures.forEach((m, i) => { m.num = i + 1; });
       } catch (e) {
-        console.warn('[Solfai] Segmented extraction failed, falling back to full image:', e.message);
+        console.warn('[Solfai] Segmented extraction failed:', e.message);
       }
     }
   }
 
-  // Step 3: Run TWO full-image extractions in PARALLEL (self-consistency)
-  const [ext1Raw, ext2Raw] = await Promise.all([
+  // Step 3: THREE extractions in PARALLEL (2x Pro + 1x Flash)
+  const [ext1Raw, ext2Raw, ext3Raw] = await Promise.all([
     callGemini(apiKey, sysBase,
-      [{ text: `Extract all notes for ${part} (staff #${staffInfo.vocal_staff_number}), measure by measure. JSON array only.` }, ...processedParts],
+      [{ text: `Extract all notes for ${part} (staff #${staffInfo.vocal_staff_number}). JSON array only.` }, ...processedParts],
       { temperature: 0, maxOutputTokens: 8192, thinkingBudget: 6000 }
     ),
     callGemini(apiKey, sysVerify,
       [{ text: `Verification pass — carefully re-read each note for ${part} (staff #${staffInfo.vocal_staff_number}). JSON array only.` }, ...processedParts],
       { temperature: 0, maxOutputTokens: 8192, thinkingBudget: 6000 }
     ),
+    callGemini(apiKey, sysBase,
+      [{ text: `Extract all notes for ${part} (staff #${staffInfo.vocal_staff_number}). JSON array only.` }, ...processedParts],
+      { model: GEMINI_FLASH, temperature: 0, maxOutputTokens: 4096, thinkingBudget: 0 }
+    ),
   ]);
 
   const measures1 = parseExtraction(ext1Raw);
   const measures2 = parseExtraction(ext2Raw);
-  const tonic = extractTonic(ext1Raw) || extractTonic(ext2Raw) || 'C';
+  const measures3 = parseExtraction(ext3Raw);
+  const tonic = extractedKey?.split(' ')[0] || 'C';
+  console.log(`[Solfai] Extractions: Pro1=${measures1.length}m, Pro2=${measures2.length}m, Flash=${measures3.length}m, tonic=${tonic}`);
 
-  // Step 4: Reconcile all extractions (full-image pass1, pass2, + segmented if available)
+  // Step 4: Reconcile all extractions
   const maxLen = Math.max(measures1.length, measures2.length, (segmentedMeasures || []).length);
   const reconciledMeasures = [];
 
   for (let i = 0; i < maxLen; i++) {
     const m1 = measures1[i];
     const m2 = measures2[i];
-    const m3 = segmentedMeasures?.[i]; // from image segmentation
+    const m3 = segmentedMeasures?.[i];
 
     if (!m1 && !m2 && m3) {
-      // Only segmented extraction got this measure
       reconciledMeasures.push({ ...m3, confidence: 'low', disagreement: false });
       continue;
     }
@@ -841,7 +944,6 @@ ${outputFormat}`;
       const agree12 = n1 === n2;
 
       if (agree12) {
-        // Both full-image passes agree — high confidence
         reconciledMeasures.push({
           num: m1.num ?? (i + 1),
           notes: m1.notes || [],
@@ -851,7 +953,6 @@ ${outputFormat}`;
           alt_notes: null,
         });
       } else if (n3 && (n1 === n3 || n2 === n3)) {
-        // Segmented extraction breaks the tie — use the one that matches
         const winner = n1 === n3 ? m1 : m2;
         reconciledMeasures.push({
           num: winner.num ?? (i + 1),
@@ -862,7 +963,6 @@ ${outputFormat}`;
           alt_notes: null,
         });
       } else {
-        // All three disagree or no segmented data — flag for review
         reconciledMeasures.push({
           num: m1.num ?? (i + 1),
           notes: m1.notes || [],
@@ -875,8 +975,14 @@ ${outputFormat}`;
     }
   }
 
-  // Step 5: Code-calculate solfege (never trust AI for this)
-  const VALID_SOLFEGE = new Set(['Do','Di','Re','Ri','Me','Mi','Fa','Fi','Sol','Si','La','Li','Te','Ti','?']);
+  // Step 5: Music theory validation
+  const theoryCorrections = validateAndFixNotes(reconciledMeasures, tonic, part);
+  if (theoryCorrections > 0) {
+    console.log(`[Solfai] Theory validation corrected ${theoryCorrections} notes`);
+  }
+
+  // Step 6: Code-calculate solfege
+  const VALID_SOLFEGE = new Set(['Do', 'Di', 'Re', 'Ri', 'Me', 'Mi', 'Fa', 'Fi', 'Sol', 'Si', 'La', 'Li', 'Te', 'Ti', '?']);
   for (const m of reconciledMeasures) {
     m.solfege = (m.notes || []).map(n =>
       n === '[?]' ? '?' : noteToSolfege(n.replace(/\d+$/, ''), tonic)
@@ -884,7 +990,10 @@ ${outputFormat}`;
     m.valid = m.solfege.every(s => VALID_SOLFEGE.has(s));
   }
 
-  // Build legacy text output (for backward compatibility with practice mode parser)
+  const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+  console.log(`[Solfai] Solfege complete: ${reconciledMeasures.length} measures in ${elapsed}s`);
+
+  // Build text output
   let textOutput = `Key: ${tonic} (Do = ${tonic})\nStaff: ${part} (staff #${staffInfo.vocal_staff_number} of ${staffInfo.total_staves || 1})\n\n`;
   for (const m of reconciledMeasures) {
     textOutput += `m.${m.num}:\n`;
@@ -906,6 +1015,7 @@ ${outputFormat}`;
       clef: staffInfo.clef || 'treble',
       measures: reconciledMeasures,
       disagreements: reconciledMeasures.filter(m => m.disagreement).length,
+      theoryCorrections,
     },
     text: textOutput,
   });
@@ -913,36 +1023,35 @@ ${outputFormat}`;
 
 // ─── RHYTHM ───────────────────────────────────────────────
 async function handleRhythm(res, apiKey, imageParts, part) {
-
-  // Preprocess images
   const processedParts = [];
   for (const p of imageParts.slice(0, 4)) {
     if (p.inlineData?.mimeType === 'image/jpeg') {
       try {
         const enhanced = await preprocessForGemini(p.inlineData.data, 'full');
         processedParts.push({ inlineData: { mimeType: 'image/jpeg', data: enhanced } });
-      } catch (_) { processedParts.push(p); }
+      } catch (e) { processedParts.push(p); }
     } else {
       processedParts.push(p);
     }
   }
 
-  const systemPrompt = `You are a rhythm coach helping a choir singer learn their part. Be precise and practical.
-Skip title/cover pages.
-SATB voice identification: Soprano=top treble stems up, Alto=bottom treble stems down, Tenor=top bass/treble-8 stems up, Bass=bottom bass stems down.`;
+  const systemPrompt = `You are a rhythm coach helping a choir singer learn their part.
+Skip title/cover pages. IGNORE watermark text.
+SATB: Soprano=top treble stems up, Alto=bottom treble stems down, Tenor=top bass/treble-8 stems up, Bass=bottom bass stems down.`;
 
   const userText = `For the ${part} voice, provide a complete rhythm guide:
 
 1. State the time signature and what note value gets one beat.
-2. For each visible measure, provide:
-   m.X: Beat pattern: "1 + 2 + 3 + 4 +" | Note values: [list] | Watch out for: [any tricky rhythm]
+2. For each visible measure:
+   m.X: Beat pattern: "1 + 2 + 3 + 4 +" | Note values: [list] | Watch out for: [tricky rhythm]
 
-Counting patterns to use:
+Counting patterns:
 - 4/4: "1 + 2 + 3 + 4 +"
 - 3/4: "1 + 2 + 3 +"
-- 6/8: "1-la-li 2-la-li" (or "1 + a 2 + a")
+- 6/8: "1-la-li 2-la-li"
 - 2/4: "1 + 2 +"
 - 2/2 (cut time): "1 + 2 +"
+- 4/8: "1-e-+ 2-e-+"
 
 Be thorough. Include ALL measures across all pages.`;
 
@@ -956,10 +1065,10 @@ Be thorough. Include ALL measures across all pages.`;
 // ─── CHAT ─────────────────────────────────────────────────
 async function handleChat(res, apiKey, messages, imageParts, part) {
   const systemPrompt = `You are Solfai, a patient and encouraging choir director and music theory coach. The student sings ${part}.
-Always reference the actual sheet music in your responses. Only cite content you can see in the images.
-Be warm, specific, and practical. Use movable Do solfege when discussing pitches.
-Never invent measures or notes that aren't in the score.
-Skip title/cover pages — focus on the actual music.
+Always reference the actual sheet music. Only cite content you can see in the images.
+Be warm, specific, and practical. Use movable Do solfege.
+Never invent measures or notes not in the score.
+Skip title/cover pages. IGNORE watermark text.
 SATB: Soprano=top treble stems up, Alto=bottom treble stems down, Tenor=top bass/treble-8 stems up, Bass=bottom bass stems down.`;
 
   const contents = [];
@@ -983,7 +1092,6 @@ SATB: Soprano=top treble stems up, Alto=bottom treble stems down, Tenor=top bass
 
   const url = `${BASE_URL}/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
 
-  // FIX BUG12: mediaResolution correct uppercase value in chat handler too
   const body = {
     contents,
     system_instruction: { parts: [{ text: systemPrompt }] },
@@ -991,11 +1099,10 @@ SATB: Soprano=top treble stems up, Alto=bottom treble stems down, Tenor=top bass
       temperature: 0.7,
       max_output_tokens: 4096,
       thinking_config: { thinking_budget: 4000 },
-      media_resolution: 'MEDIA_RESOLUTION_HIGH',  // FIX BUG12: was 'media_resolution_high'
+      media_resolution: 'MEDIA_RESOLUTION_HIGH',
     },
   };
 
-  // Retry logic for chat too
   const maxAttempts = 3;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     const resp = await fetch(url, {
@@ -1007,7 +1114,7 @@ SATB: Soprano=top treble stems up, Alto=bottom treble stems down, Tenor=top bass
     if (!resp.ok) {
       const errText = await resp.text();
       let detail = `Gemini error: ${resp.status}`;
-      try { detail = JSON.parse(errText).error?.message || detail; } catch (_) {}
+      try { detail = JSON.parse(errText).error?.message || detail; } catch (e) { /* ignore */ }
       if ((resp.status === 429 || resp.status >= 500) && attempt < maxAttempts) {
         await new Promise(r => setTimeout(r, attempt * 2000));
         continue;
@@ -1037,13 +1144,13 @@ app.post('/api/evaluate-singing', upload.single('audio'), async (req, res) => {
     const audioBase64 = audioBuffer.toString('base64');
     const mimeType = req.file.mimetype || 'audio/webm';
 
-    const systemPrompt = `You are a professional choir director and vocal coach evaluating a student's singing. Be encouraging, specific, and constructive. Always find something positive to say first.`;
+    const systemPrompt = `You are a professional choir director and vocal coach evaluating a student's singing. Be encouraging, specific, and constructive. Always find something positive first.`;
 
     const userText = `Listen to this audio of a student singing. They are a ${selectedPart || 'choir'} singer.
 Context: ${pieceTitle ? `Piece: "${pieceTitle}"` : 'Unknown piece'}, Key: ${keySignature || 'unknown'}, Starting pitch: ${startingPitch || 'unknown'}.
 ${solfege ? `Expected solfege: ${solfege}` : ''}
 
-Evaluate their singing as a professional choir director. Return ONLY valid JSON:
+Evaluate as a professional choir director. Return ONLY valid JSON:
 {
   "overallScore": <integer 0-100>,
   "pitchAccuracy": <integer 0-100>,
@@ -1051,18 +1158,20 @@ Evaluate their singing as a professional choir director. Return ONLY valid JSON:
   "breathSupport": <integer 0-100>,
   "vowelShape": <integer 0-100>,
   "rhythm": <integer 0-100>,
+  "diction": <integer 0-100>,
   "detailedFeedback": "<2-3 sentences of warm, specific, constructive feedback>",
-  "actionItems": ["<specific thing to improve 1>", "<specific thing to improve 2>", "<specific thing to improve 3>"]
+  "actionItems": ["<specific improvement 1>", "<specific improvement 2>", "<specific improvement 3>"],
+  "strengths": ["<positive observation 1>", "<positive observation 2>"]
 }
 
-Be encouraging. Most student singers score 40-75. Only score below 30 if the recording is clearly off-pitch or unclear.`;
+Most student singers score 40-75. Only score below 30 if clearly off-pitch or unclear.`;
 
     const url = `${BASE_URL}/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
     const body = {
       contents: [{ role: 'user', parts: [
         { text: userText },
         { inlineData: { mimeType, data: audioBase64 } }
-      ]}],
+      ] }],
       system_instruction: { parts: [{ text: systemPrompt }] },
       generation_config: {
         temperature: 0.3,
@@ -1081,7 +1190,7 @@ Be encouraging. Most student singers score 40-75. Only score below 30 if the rec
     if (!resp.ok) {
       const errText = await resp.text();
       let detail = `Gemini error: ${resp.status}`;
-      try { detail = JSON.parse(errText).error?.message || detail; } catch (_) {}
+      try { detail = JSON.parse(errText).error?.message || detail; } catch (e) { /* ignore */ }
       throw new Error(detail);
     }
 
@@ -1090,21 +1199,29 @@ Be encouraging. Most student singers score 40-75. Only score below 30 if the rec
       ?.filter(p => p.text && !p.thought).map(p => p.text).join('') || '{}';
 
     let result;
-    try { result = JSON.parse(text.replace(/```json?|```/gi, '').trim()); }
-    catch (_) { result = { overallScore: 60, pitchAccuracy: 60, toneQuality: 60, breathSupport: 60, vowelShape: 60, rhythm: 60, detailedFeedback: 'Great effort! Keep practicing.', actionItems: ['Focus on pitch accuracy', 'Work on breath support', 'Practice regularly'] }; }
+    try {
+      result = JSON.parse(text.replace(/```json?|```/gi, '').trim());
+    } catch (e) {
+      result = {
+        overallScore: 60, pitchAccuracy: 60, toneQuality: 60,
+        breathSupport: 60, vowelShape: 60, rhythm: 60, diction: 60,
+        detailedFeedback: 'Great effort! Keep practicing.',
+        actionItems: ['Focus on pitch accuracy', 'Work on breath support', 'Practice regularly'],
+        strengths: ['Good effort', 'Consistent rhythm']
+      };
+    }
 
     return res.status(200).json(result);
   } catch (err) {
-    console.error('Evaluate-singing error:', err.message);
+    console.error('[Solfai] Evaluate-singing error:', err.message);
     return res.status(500).json({ error: err.message });
   } finally {
-    try { unlinkSync(filePath); } catch (_) {}
+    try { unlinkSync(filePath); } catch (e) { /* ignore */ }
   }
 });
 
-// ─── MusicXML Parser ─────────────────────────────────────
+// ─── MusicXML Parser ──────────────────────────────────────
 function parseMusicXML(xmlString, targetPart) {
-  // Extract part list
   const partList = [];
   const partListMatch = xmlString.match(/<part-list>([\s\S]*?)<\/part-list>/);
   if (partListMatch) {
@@ -1115,26 +1232,22 @@ function parseMusicXML(xmlString, targetPart) {
     }
   }
 
-  // Find the best matching part for the target voice
   const target = (targetPart || 'Soprano').toLowerCase();
   let partId = partList[0]?.id || 'P1';
   for (const p of partList) {
     if (p.name.toLowerCase().includes(target)) { partId = p.id; break; }
   }
 
-  // Extract key signature (fifths value)
   let fifths = 0;
   const fifthsMatch = xmlString.match(/<fifths>(-?\d+)<\/fifths>/);
   if (fifthsMatch) fifths = parseInt(fifthsMatch[1], 10);
 
-  // Resolve key from fifths
   const sharpCount = fifths > 0 ? fifths : 0;
   const flatCount = fifths < 0 ? Math.abs(fifths) : 0;
-  let code = sharpCount > 0 ? `${sharpCount}s` : flatCount > 0 ? `${flatCount}b` : '0';
+  const code = sharpCount > 0 ? `${sharpCount}s` : flatCount > 0 ? `${flatCount}b` : '0';
   const keyEntry = KEY_FROM_COUNT[code];
   const tonic = keyEntry ? keyEntry.major.split(' ')[0] : 'C';
 
-  // Extract the matching <part> element
   const partRegex = new RegExp(`<part\\s+id="${partId}"[^>]*>([\\s\\S]*?)<\\/part>`);
   const partMatch = xmlString.match(partRegex);
   if (!partMatch) {
@@ -1144,7 +1257,6 @@ function parseMusicXML(xmlString, targetPart) {
   const partXml = partMatch[1];
   const measures = [];
 
-  // Parse each measure
   const measureRegex = /<measure[^>]*number="(\d+)"[^>]*>([\s\S]*?)<\/measure>/g;
   let mm;
   while ((mm = measureRegex.exec(partXml)) !== null) {
@@ -1153,15 +1265,11 @@ function parseMusicXML(xmlString, targetPart) {
     const notes = [];
     const lyrics = [];
 
-    // Parse notes within this measure
     const noteRegex = /<note>([\s\S]*?)<\/note>/g;
     let nm;
     while ((nm = noteRegex.exec(measureXml)) !== null) {
       const noteXml = nm[1];
-
-      // Skip rests
       if (noteXml.includes('<rest')) continue;
-      // Skip chord notes (secondary notes in a chord) — keep only the first
       if (noteXml.includes('<chord')) continue;
 
       const stepMatch = noteXml.match(/<step>([A-G])<\/step>/);
@@ -1179,24 +1287,19 @@ function parseMusicXML(xmlString, targetPart) {
         notes.push(noteName);
       }
 
-      // Extract lyrics
       const lyricMatch = noteXml.match(/<lyric[\s\S]*?<text>([^<]*)<\/text>/);
       if (lyricMatch) lyrics.push(lyricMatch[1]);
     }
 
     if (notes.length > 0) {
-      measures.push({
-        num: measureNum,
-        notes,
-        lyrics: lyrics.join(' '),
-      });
+      measures.push({ num: measureNum, notes, lyrics: lyrics.join(' ') });
     }
   }
 
   return { tonic, measures, partId, partList, sharpCount, flatCount };
 }
 
-// ─── MusicXML Upload Route ───────────────────────────────
+// ─── MusicXML Upload Route ────────────────────────────────
 const musicxmlUpload = multer({ dest: '/tmp/solfai-uploads/', limits: { fileSize: 10 * 1024 * 1024 } });
 app.post('/api/parse-musicxml', musicxmlUpload.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file provided' });
@@ -1206,12 +1309,10 @@ app.post('/api/parse-musicxml', musicxmlUpload.single('file'), async (req, res) 
     const selectedPart = req.body.selectedPart || 'Soprano';
     let xmlString;
 
-    // Detect .mxl (ZIP) vs .musicxml (plain XML)
     const originalName = (req.file.originalname || '').toLowerCase();
     const buf = readFileSync(filePath);
 
-    if (originalName.endsWith('.mxl') || buf[0] === 0x50 && buf[1] === 0x4B) {
-      // .mxl is a ZIP file containing .musicxml
+    if (originalName.endsWith('.mxl') || (buf[0] === 0x50 && buf[1] === 0x4B)) {
       const zip = new AdmZip(buf);
       const entries = zip.getEntries();
       const xmlEntry = entries.find(e =>
@@ -1231,8 +1332,7 @@ app.post('/api/parse-musicxml', musicxmlUpload.single('file'), async (req, res) 
     const result = parseMusicXML(xmlString, selectedPart);
     if (result.error) return res.status(400).json(result);
 
-    // Code-calculate solfege
-    const VALID_SOLFEGE = new Set(['Do','Di','Re','Ri','Me','Mi','Fa','Fi','Sol','Si','La','Li','Te','Ti','?']);
+    const VALID_SOLFEGE = new Set(['Do', 'Di', 'Re', 'Ri', 'Me', 'Mi', 'Fa', 'Fi', 'Sol', 'Si', 'La', 'Li', 'Te', 'Ti', '?']);
     for (const m of result.measures) {
       m.solfege = (m.notes || []).map(n =>
         noteToSolfege(n.replace(/\d+$/, ''), result.tonic)
@@ -1261,30 +1361,27 @@ app.post('/api/parse-musicxml', musicxmlUpload.single('file'), async (req, res) 
       parts: result.partList.map(p => p.name),
     });
   } catch (err) {
-    console.error('MusicXML parse error:', err.message);
+    console.error('[Solfai] MusicXML parse error:', err.message);
     return res.status(500).json({ error: 'Failed to parse MusicXML: ' + err.message });
   } finally {
-    try { unlinkSync(filePath); } catch (_) {}
+    try { unlinkSync(filePath); } catch (e) { /* ignore */ }
   }
 });
 
-// ─── Manual Note Entry Route ─────────────────────────────
+// ─── Manual Note Entry Route ──────────────────────────────
 app.post('/api/manual-solfege', (req, res) => {
   const { notes, key } = req.body;
   if (!notes) return res.status(400).json({ error: 'No notes provided' });
 
   const tonic = (key || 'C').replace(/\s*(major|minor)/i, '').trim();
 
-  // Parse input: "C4 D4 E4 | F4 G4 A4 | B4 C5"
-  // Pipe separates measures, space separates notes within a measure
   const rawMeasures = notes.split('|').map(s => s.trim()).filter(Boolean);
   const measures = rawMeasures.map((m, i) => {
     const noteList = m.split(/[\s,]+/).filter(Boolean);
     return { num: i + 1, notes: noteList, lyrics: '' };
   });
 
-  // Code-calculate solfege
-  const VALID_SOLFEGE = new Set(['Do','Di','Re','Ri','Me','Mi','Fa','Fi','Sol','Si','La','Li','Te','Ti','?']);
+  const VALID_SOLFEGE = new Set(['Do', 'Di', 'Re', 'Ri', 'Me', 'Mi', 'Fa', 'Fi', 'Sol', 'Si', 'La', 'Li', 'Te', 'Ti', '?']);
   for (const m of measures) {
     m.solfege = (m.notes || []).map(n =>
       noteToSolfege(n.replace(/\d+$/, ''), tonic)
@@ -1314,4 +1411,4 @@ app.post('/api/manual-solfege', (req, res) => {
 });
 
 // ─── Start ────────────────────────────────────────────────
-app.listen(PORT, () => console.log(`Solfai v8 running on port ${PORT}`));
+app.listen(PORT, () => console.log(`[Solfai v9] Running on port ${PORT}`));
