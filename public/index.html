@@ -1164,6 +1164,9 @@
           <button class="btn-secondary" onclick="showTransposeModal()" id="transposeBtn" style="display:none;padding:7px 16px;font-size:0.78rem;">&#x1F3B9; Transpose</button>
           <button class="btn-secondary" onclick="showPerformanceOrder()" id="performanceOrderBtn" style="display:none;padding:7px 16px;font-size:0.78rem;">&#x1F4CB; Performance Order</button>
           <button class="btn-secondary" onclick="loadChordAnalysis()" id="chordAnalysisBtn" style="display:none;padding:7px 16px;font-size:0.78rem;">&#x1F3B6; Chord Analysis</button>
+          <button class="btn-secondary" onclick="breakdownSections()" id="sectionBreakdownBtn" style="display:none;padding:7px 16px;font-size:0.78rem;">&#x1F4C4; Sections</button>
+          <button class="btn-secondary" onclick="showCapoModal()" id="capoBtn" style="display:none;padding:7px 16px;font-size:0.78rem;">&#x1F3B8; Capo</button>
+          <button class="btn-secondary" onclick="startAuditionPrep()" id="auditionPrepBtn" style="padding:7px 16px;font-size:0.78rem;">&#x1F3AF; Audition Prep</button>
         </div>
         <div id="fullPieceProgress" style="display:none;margin-bottom:12px;">
           <div style="height:4px;background:var(--card2);border-radius:2px;overflow:hidden;">
@@ -1173,6 +1176,7 @@
         </div>
         <button class="mode-btn" id="solfegeBtn" onclick="loadSolfege()">Generate Solfege for my part</button>
         <div class="mode-loading" id="solfegeLoading"><div class="mini-spinner"></div> Generating solfege...</div>
+        <div id="sectionTabs" style="display:none;margin-bottom:12px;display:flex;gap:6px;flex-wrap:wrap;"></div>
         <div class="mode-output" id="solfegeOutput" style="white-space:normal;"></div>
         <div id="performanceOrderResult" style="display:none;margin-top:18px;"></div>
         <div id="chordAnalysisResult" style="display:none;margin-top:18px;"></div>
@@ -1294,6 +1298,11 @@
         <button class="btn-secondary" onclick="togglePracticeFullscreen()" id="btnPracticeFS">&#x26F6; Fullscreen</button>
         <button class="btn-secondary" onclick="toggleSectionLeaderMode()" id="btnSectionLeader">&#x1F3B6; Section Leader</button>
         <button class="btn-secondary" onclick="toggleDuetMode()" id="btnDuetMode">&#x1F46B; Duet</button>
+        <button class="btn-secondary" onclick="startRhythmClapping()" id="btnRhythmClap">&#x1F44F; Rhythm Clap</button>
+        <button class="btn-secondary" onclick="exportAudioWAV()" id="btnExportAudio">&#x1F4E5; Export Audio</button>
+        <label style="display:flex;align-items:center;gap:4px;font-size:0.72rem;color:var(--muted);cursor:pointer;">
+          <input type="checkbox" id="countInToggle" checked style="accent-color:var(--gold);"> Count-in
+        </label>
       </div>
     </div>
 
@@ -4658,10 +4667,449 @@ loadSolfege = async function() {
   await _origLoadSolfege();
   if (_solfegeStructured) {
     $('transposeBtn').style.display = 'inline-flex';
+    $('sectionBreakdownBtn').style.display = 'inline-flex';
+    $('capoBtn').style.display = 'inline-flex';
     updateChordAnalysisVisibility();
     checkPerformanceOrderVisibility();
   }
 };
+
+// ═══════════════════════════════════════════════════════════════
+// RHYTHM CLAPPING EXERCISE
+// ═══════════════════════════════════════════════════════════════
+let _clapActive = false;
+async function startRhythmClapping() {
+  if (!practiceData || !practiceData.length) { showToast('Load solfege and start practice first', 'info'); return; }
+  if (_clapActive) { _clapActive = false; $('btnRhythmClap').textContent = '\uD83D\uDC4F Rhythm Clap'; return; }
+  _clapActive = true;
+  $('btnRhythmClap').textContent = '\u23F9 Stop Clap';
+  const m = practiceData[practiceIndex];
+  const noteCount = (m.notes || []).length;
+  const bpm = 120;
+  const beatMs = 60000 / bpm;
+  showToast(`Clap ${noteCount} beats! Listen for the click...`, 'info');
+
+  let stream, ctx, analyser;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    ctx = new AudioContext();
+    const src = ctx.createMediaStreamSource(stream);
+    analyser = ctx.createAnalyser();
+    analyser.fftSize = 512;
+    src.connect(analyser);
+  } catch (e) { showToast('Mic access denied', 'error'); _clapActive = false; $('btnRhythmClap').textContent = '\uD83D\uDC4F Rhythm Clap'; return; }
+
+  const buf = new Float32Array(analyser.fftSize);
+  let expectedTimes = [];
+  let clapTimes = [];
+  let lastClap = 0;
+
+  // Count-in
+  for (let i = 0; i < 4 && _clapActive; i++) {
+    playPiano(800, 0.05);
+    await new Promise(r => setTimeout(r, beatMs));
+  }
+
+  // Record expected beat times
+  const startT = performance.now();
+  for (let i = 0; i < noteCount; i++) expectedTimes.push(startT + i * beatMs);
+
+  // Play click track and listen for claps
+  for (let i = 0; i < noteCount && _clapActive; i++) {
+    playPiano(600, 0.05);
+    const beatEnd = startT + (i + 1) * beatMs;
+    while (performance.now() < beatEnd && _clapActive) {
+      analyser.getFloatTimeDomainData(buf);
+      const peak = Math.max(...buf.map(Math.abs));
+      if (peak > 0.15 && performance.now() - lastClap > 100) {
+        clapTimes.push(performance.now());
+        lastClap = performance.now();
+      }
+      await new Promise(r => setTimeout(r, 10));
+    }
+  }
+
+  stream.getTracks().forEach(t => t.stop());
+  try { ctx.close(); } catch(e) {}
+
+  // Score: for each expected beat, find nearest clap within tolerance
+  let hits = 0;
+  const tolerance = beatMs * 0.35;
+  for (const et of expectedTimes) {
+    const nearest = clapTimes.reduce((best, ct) => Math.abs(ct - et) < Math.abs(best - et) ? ct : best, Infinity);
+    if (Math.abs(nearest - et) < tolerance) hits++;
+  }
+  const score = Math.round((hits / noteCount) * 100);
+  showToast(`Rhythm clap score: ${score}% (${hits}/${noteCount} beats on time)`, score >= 70 ? 'success' : 'info', 4000);
+  if (score >= 90) launchConfetti();
+  _clapActive = false;
+  $('btnRhythmClap').textContent = '\uD83D\uDC4F Rhythm Clap';
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SECTION BREAKDOWN
+// ═══════════════════════════════════════════════════════════════
+let _activeSectionFilter = null;
+function breakdownSections() {
+  if (!_solfegeStructured || !_solfegeStructured.measures?.length) { showToast('Load solfege first', 'info'); return; }
+  const measures = _solfegeStructured.measures;
+  const sections = [];
+  let secStart = 0;
+
+  for (let i = 0; i < measures.length; i++) {
+    const m = measures[i];
+    const isBreak = m.repeatEnd || m.repeatStart || m.keyChange || (i > 0 && i % 8 === 0);
+    if (isBreak && i > secStart) {
+      sections.push({ start: secStart, end: i - 1, label: `Section ${sections.length + 1}` });
+      secStart = i;
+    }
+  }
+  sections.push({ start: secStart, end: measures.length - 1, label: `Section ${sections.length + 1}` });
+
+  const tabs = $('sectionTabs');
+  tabs.style.display = 'flex';
+  tabs.innerHTML = `<button class="part-btn active" onclick="filterSection(null, this)">All</button>` +
+    sections.map((s, i) => `<button class="part-btn" onclick="filterSection(${i}, this)" title="m.${s.start+1}-${s.end+1}">${s.label}</button>`).join('');
+
+  window._sections = sections;
+  showToast(`Divided into ${sections.length} sections`, 'success');
+}
+
+function filterSection(idx, btn) {
+  document.querySelectorAll('#sectionTabs .part-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+
+  const cards = document.querySelectorAll('#solfegeOutput .solfege-measure-card, #solfegeOutput > div > div');
+  if (idx === null) {
+    cards.forEach(c => c.style.display = '');
+    _activeSectionFilter = null;
+    return;
+  }
+
+  const sec = window._sections[idx];
+  if (!sec) return;
+  _activeSectionFilter = idx;
+  cards.forEach((c, i) => {
+    c.style.display = (i >= sec.start && i <= sec.end) ? '' : 'none';
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// CAPO CALCULATOR UI
+// ═══════════════════════════════════════════════════════════════
+function showCapoModal() {
+  if (!_solfegeStructured) { showToast('Load solfege first', 'info'); return; }
+  let overlay = $('capoOverlay');
+  if (!overlay) {
+    document.body.insertAdjacentHTML('beforeend', `
+      <div id="capoOverlay" style="position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:2000;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(8px);" onclick="if(event.target===this)this.style.display='none'">
+        <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius-xl);padding:36px;max-width:380px;width:90%;box-shadow:0 24px 80px rgba(0,0,0,0.5);">
+          <div style="font-family:'Cormorant Garamond',serif;font-size:1.4rem;font-weight:700;color:var(--text);margin-bottom:8px;">Capo Calculator</div>
+          <div style="font-size:0.82rem;color:var(--text2);margin-bottom:16px;">Current key: <strong id="capoCurrentKey"></strong></div>
+          <div style="font-size:0.82rem;color:var(--text2);margin-bottom:12px;">I want to play in:</div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:24px;" id="capoKeyGrid"></div>
+          <div id="capoResult" style="display:none;background:var(--bg);border-radius:var(--radius-md);padding:16px;text-align:center;">
+            <div style="font-size:0.72rem;text-transform:uppercase;letter-spacing:2px;color:var(--muted);margin-bottom:6px;">Place Capo On</div>
+            <div style="font-family:'Cormorant Garamond',serif;font-size:2.5rem;font-weight:700;color:var(--gold);" id="capoFretNum">-</div>
+            <div style="font-size:0.82rem;color:var(--text2);margin-top:4px;" id="capoFretLabel"></div>
+          </div>
+          <button class="btn-secondary" onclick="$('capoOverlay').style.display='none'" style="margin-top:16px;width:100%;">Close</button>
+        </div>
+      </div>`);
+    overlay = $('capoOverlay');
+  }
+  const currentKey = _solfegeStructured.tonic || 'C';
+  $('capoCurrentKey').textContent = currentKey;
+  const keys = ['C','Db','D','Eb','E','F','F#','G','Ab','A','Bb','B'];
+  $('capoKeyGrid').innerHTML = keys.map(k =>
+    `<button class="part-btn" style="min-width:48px;padding:8px 14px;" onclick="calculateCapo('${currentKey}','${k}')">${k}</button>`
+  ).join('');
+  $('capoResult').style.display = 'none';
+  overlay.style.display = 'flex';
+}
+
+async function calculateCapo(origKey, targetKey) {
+  try {
+    const res = await fetch('/api/capo', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ originalKey: origKey, targetKey })
+    });
+    const data = await res.json();
+    if (data.error) { showToast(data.error, 'error'); return; }
+    $('capoFretNum').textContent = data.capoFret === 0 ? 'No capo' : `Fret ${data.capoFret}`;
+    $('capoFretLabel').textContent = data.capoFret === 0 ? 'Same key — no capo needed' : `Play ${data.playShapes || targetKey} shapes with capo on fret ${data.capoFret}`;
+    $('capoResult').style.display = 'block';
+  } catch (e) { showToast('Capo calculation failed', 'error'); }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// COUNT-IN BEFORE PLAYBACK
+// ═══════════════════════════════════════════════════════════════
+const _origPlayCurrentMeasure = playCurrentMeasure;
+playCurrentMeasure = async function() {
+  const countIn = $('countInToggle')?.checked;
+  if (countIn) {
+    const bpm = 120;
+    const beatMs = 60000 / bpm;
+    for (let i = 0; i < 4; i++) {
+      playPiano(i === 0 ? 880 : 660, 0.05);
+      await new Promise(r => setTimeout(r, beatMs));
+    }
+  }
+  _origPlayCurrentMeasure();
+};
+
+// ═══════════════════════════════════════════════════════════════
+// EXPORT AUDIO AS WAV
+// ═══════════════════════════════════════════════════════════════
+async function exportAudioWAV() {
+  if (!practiceData || !practiceData.length) { showToast('Load solfege first', 'info'); return; }
+  showToast('Rendering audio...', 'info');
+
+  const bpm = parseInt($('speedSlider')?.value || 100) * 1.2;
+  const beatDur = 60 / bpm;
+  const totalNotes = practiceData.reduce((s, m) => s + (m.notes?.length || 0), 0);
+  const duration = totalNotes * beatDur + 1;
+  const sampleRate = 44100;
+  const offCtx = new OfflineAudioContext(1, sampleRate * duration, sampleRate);
+
+  let t = 0;
+  for (const m of practiceData) {
+    for (const n of (m.notes || [])) {
+      if (n === '[?]') { t += beatDur; continue; }
+      const freq = parseNote(n);
+      if (!freq) { t += beatDur; continue; }
+
+      const osc = offCtx.createOscillator();
+      const gain = offCtx.createGain();
+      osc.frequency.value = freq;
+      osc.type = 'triangle';
+      osc.connect(gain);
+      gain.connect(offCtx.destination);
+      gain.gain.setValueAtTime(0, t);
+      gain.gain.linearRampToValueAtTime(0.3, t + 0.005);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + beatDur * 0.9);
+      osc.start(t);
+      osc.stop(t + beatDur);
+
+      // Add harmonics
+      for (const [mult, vol] of [[2, 0.15], [3, 0.08], [4, 0.04]]) {
+        const h = offCtx.createOscillator();
+        const hg = offCtx.createGain();
+        h.frequency.value = freq * mult;
+        h.type = 'sine';
+        h.connect(hg);
+        hg.connect(offCtx.destination);
+        hg.gain.setValueAtTime(0, t);
+        hg.gain.linearRampToValueAtTime(vol, t + 0.005);
+        hg.gain.exponentialRampToValueAtTime(0.001, t + beatDur * 0.8);
+        h.start(t);
+        h.stop(t + beatDur);
+      }
+      t += beatDur;
+    }
+  }
+
+  try {
+    const rendered = await offCtx.startRendering();
+    const wav = audioBufferToWav(rendered);
+    const blob = new Blob([wav], { type: 'audio/wav' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'solfai-practice.wav';
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast('Audio exported!', 'success');
+  } catch (e) { showToast('Export failed: ' + e.message, 'error'); }
+}
+
+function audioBufferToWav(buffer) {
+  const numChannels = buffer.numberOfChannels;
+  const sampleRate = buffer.sampleRate;
+  const format = 1; // PCM
+  const bitDepth = 16;
+  const data = buffer.getChannelData(0);
+  const dataLength = data.length * (bitDepth / 8);
+  const headerLength = 44;
+  const totalLength = headerLength + dataLength;
+  const arrayBuffer = new ArrayBuffer(totalLength);
+  const view = new DataView(arrayBuffer);
+
+  function writeString(offset, str) { for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i)); }
+  writeString(0, 'RIFF');
+  view.setUint32(4, totalLength - 8, true);
+  writeString(8, 'WAVE');
+  writeString(12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, format, true);
+  view.setUint16(22, numChannels, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * numChannels * (bitDepth / 8), true);
+  view.setUint16(32, numChannels * (bitDepth / 8), true);
+  view.setUint16(34, bitDepth, true);
+  writeString(36, 'data');
+  view.setUint32(40, dataLength, true);
+
+  let offset = 44;
+  for (let i = 0; i < data.length; i++, offset += 2) {
+    const s = Math.max(-1, Math.min(1, data[i]));
+    view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+  }
+  return arrayBuffer;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// AUDITION PREP MODE
+// ═══════════════════════════════════════════════════════════════
+async function startAuditionPrep() {
+  const overlay = document.createElement('div');
+  overlay.id = 'auditionOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:3000;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(12px);';
+  overlay.innerHTML = `
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius-xl);padding:44px;max-width:520px;width:90%;text-align:center;">
+      <div style="font-family:'Cormorant Garamond',serif;font-size:1.8rem;font-weight:700;background:linear-gradient(135deg,var(--gold),var(--gold-light));-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:12px;">Audition Prep Mode</div>
+      <div style="font-size:0.85rem;color:var(--text2);line-height:1.7;margin-bottom:28px;">
+        Practice like it's the real thing. You'll get a count-in, then sing your piece while being recorded. At the end, our AI choir director will give you detailed audition feedback.
+      </div>
+      <div style="display:flex;flex-direction:column;gap:12px;">
+        <div style="font-size:0.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:2px;">Choose format:</div>
+        <button class="mode-btn" onclick="runAudition('free')" style="padding:14px;">Free Singing — Sing your prepared piece</button>
+        <button class="mode-btn" onclick="runAudition('sight')" style="padding:14px;">Sight-Reading — Random melody (NYSSMA/All-State style)</button>
+        <button class="btn-secondary" onclick="$('auditionOverlay').remove()" style="margin-top:8px;">Cancel</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+
+async function runAudition(type) {
+  const overlay = $('auditionOverlay');
+  if (!overlay) return;
+
+  if (type === 'sight') {
+    // Generate sight reading exercise
+    overlay.querySelector('div > div').innerHTML = `
+      <div style="font-family:'Cormorant Garamond',serif;font-size:1.4rem;font-weight:700;color:var(--gold);margin-bottom:16px;">Sight-Reading Challenge</div>
+      <div style="font-size:0.82rem;color:var(--text2);margin-bottom:20px;">You have 30 seconds to study, then sing.</div>
+      <div id="auditionExercise" style="margin-bottom:20px;"><div class="mini-spinner"></div></div>
+      <div id="auditionTimer" style="font-family:'Cormorant Garamond',serif;font-size:2rem;color:var(--gold);margin-bottom:16px;"></div>
+      <button class="btn-success" id="auditionRecordBtn" onclick="recordAudition()" style="display:none;padding:14px 32px;">Record Your Attempt</button>
+      <button class="btn-secondary" onclick="$('auditionOverlay').remove()" style="margin-top:8px;">Cancel</button>`;
+
+    try {
+      const res = await fetch('/api/sight-reading', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ difficulty: 3, key: 'C', numMeasures: 4 })
+      });
+      const data = await res.json();
+      const ex = $('auditionExercise');
+      ex.innerHTML = data.measures.map(m =>
+        `<div style="display:inline-block;margin:4px 8px;padding:8px 12px;background:var(--bg);border-radius:var(--radius-md);font-size:0.9rem;">
+          <div style="color:var(--gold);font-weight:600;">m.${m.num}</div>
+          <div style="color:var(--text);">${(m.notes||[]).join(' ')}</div>
+          <div style="color:var(--violet);font-size:0.82rem;">${(m.solfege||[]).join(' ')}</div>
+        </div>`
+      ).join('');
+
+      // 30 second study timer
+      let countdown = 30;
+      const tid = setInterval(() => {
+        countdown--;
+        $('auditionTimer').textContent = `Study time: ${countdown}s`;
+        if (countdown <= 0) {
+          clearInterval(tid);
+          $('auditionTimer').textContent = 'Time to sing!';
+          $('auditionRecordBtn').style.display = 'inline-flex';
+        }
+      }, 1000);
+      $('auditionTimer').textContent = `Study time: ${countdown}s`;
+    } catch (e) { showToast('Failed to generate exercise', 'error'); }
+  } else {
+    // Free singing mode — just record
+    overlay.querySelector('div > div').innerHTML = `
+      <div style="font-family:'Cormorant Garamond',serif;font-size:1.4rem;font-weight:700;color:var(--gold);margin-bottom:16px;">Mock Audition</div>
+      <div style="font-size:0.82rem;color:var(--text2);margin-bottom:20px;">Sing your prepared piece. Our AI will evaluate your performance.</div>
+      <button class="btn-success" onclick="recordAudition()" style="padding:14px 32px;">Start Recording</button>
+      <button class="btn-secondary" onclick="$('auditionOverlay').remove()" style="margin-top:12px;">Cancel</button>`;
+  }
+}
+
+async function recordAudition() {
+  const overlay = $('auditionOverlay');
+  if (!overlay) return;
+  let stream, recorder, chunks = [];
+
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    recorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+  } catch (e) { showToast('Mic access denied', 'error'); return; }
+
+  recorder.ondataavailable = e => chunks.push(e.data);
+  recorder.start();
+
+  overlay.querySelector('div > div').innerHTML = `
+    <div style="font-family:'Cormorant Garamond',serif;font-size:1.4rem;font-weight:700;color:var(--error);margin-bottom:16px;">
+      <span style="display:inline-block;width:12px;height:12px;background:var(--error);border-radius:50%;animation:pulse 1s infinite;margin-right:8px;vertical-align:middle;"></span>
+      Recording...
+    </div>
+    <div id="auditionRecTimer" style="font-family:'Cormorant Garamond',serif;font-size:2.5rem;color:var(--text);margin-bottom:20px;">0:00</div>
+    <button class="btn-secondary" onclick="window._stopAudition && window._stopAudition()" style="padding:14px 32px;">Stop & Get Feedback</button>`;
+
+  let secs = 0;
+  const tid = setInterval(() => { secs++; const el = $('auditionRecTimer'); if (el) el.textContent = `${Math.floor(secs/60)}:${String(secs%60).padStart(2,'0')}`; }, 1000);
+
+  window._stopAudition = async () => {
+    clearInterval(tid);
+    recorder.stop();
+    stream.getTracks().forEach(t => t.stop());
+    window._stopAudition = null;
+
+    overlay.querySelector('div > div').innerHTML = `
+      <div class="mini-spinner" style="margin:20px auto;"></div>
+      <div style="font-size:0.85rem;color:var(--text2);margin-top:12px;">AI choir director is evaluating your performance...</div>`;
+
+    await new Promise(r => recorder.onstop = r);
+    const blob = new Blob(chunks, { type: 'audio/webm' });
+    const fd = new FormData();
+    fd.append('audio', blob, 'audition.webm');
+    fd.append('selectedPart', selectedPart || 'Soprano');
+    if (currentAnalysis?.structured) {
+      fd.append('pieceTitle', currentAnalysis.structured.pieceTitle || '');
+      fd.append('keySignature', currentAnalysis.structured.keySignature || '');
+      fd.append('startingPitch', currentAnalysis.structured.startingPitch || '');
+    }
+
+    try {
+      const res = await fetch('/api/evaluate-singing', { method: 'POST', body: fd });
+      const result = await res.json();
+      if (result.error) throw new Error(result.error);
+
+      overlay.querySelector('div > div').innerHTML = `
+        <div style="font-family:'Cormorant Garamond',serif;font-size:1.4rem;font-weight:700;color:var(--gold);margin-bottom:16px;">Audition Results</div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px;">
+          ${['Overall|overallScore', 'Pitch|pitchAccuracy', 'Tone|toneQuality', 'Breath|breathSupport', 'Vowels|vowelShape', 'Rhythm|rhythm'].map(item => {
+            const [label, key] = item.split('|');
+            const val = result[key] || 0;
+            const color = val >= 70 ? 'var(--gold)' : val >= 50 ? 'var(--violet)' : 'var(--error)';
+            return `<div style="text-align:center;"><div style="font-family:'Cormorant Garamond',serif;font-size:1.6rem;font-weight:700;color:${color};">${val}</div><div style="font-size:0.65rem;color:var(--muted);text-transform:uppercase;letter-spacing:1px;">${label}</div></div>`;
+          }).join('')}
+        </div>
+        <div style="background:var(--bg);border-radius:var(--radius-md);padding:16px;text-align:left;font-size:0.85rem;color:var(--text2);line-height:1.7;margin-bottom:16px;">${esc(result.detailedFeedback || '')}</div>
+        ${result.strengths?.length ? `<div style="margin-bottom:12px;text-align:left;"><div style="font-size:0.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-bottom:6px;">Strengths</div>${result.strengths.map(s => `<div style="font-size:0.82rem;color:var(--text2);padding:4px 0;">\u2713 ${esc(s)}</div>`).join('')}</div>` : ''}
+        ${result.actionItems?.length ? `<div style="margin-bottom:16px;text-align:left;"><div style="font-size:0.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-bottom:6px;">Work On</div>${result.actionItems.map(a => `<div style="font-size:0.82rem;color:var(--text2);padding:4px 0;">\u25B6 ${esc(a)}</div>`).join('')}</div>` : ''}
+        <div style="display:flex;gap:8px;justify-content:center;">
+          <button class="btn-success" onclick="$('auditionOverlay').remove();startAuditionPrep()">Try Again</button>
+          <button class="btn-secondary" onclick="$('auditionOverlay').remove()">Done</button>
+        </div>`;
+
+      if (result.overallScore >= 80) launchConfetti();
+    } catch (e) {
+      overlay.querySelector('div > div').innerHTML = `
+        <div style="color:var(--error);margin-bottom:16px;">Evaluation failed: ${esc(e.message)}</div>
+        <button class="btn-secondary" onclick="$('auditionOverlay').remove()">Close</button>`;
+    }
+  };
+}
 
 </script>
 
