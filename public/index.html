@@ -751,12 +751,132 @@
 
     @media print {
       .sidebar, .blob, body::before, body::after, .chat-container, .upload-zone, .part-selector,
-      .side-panel, .overlay, footer, .cheatsheet-panel, .shortcuts-overlay, .top-bar { display: none !important; }
+      .side-panel, .overlay, footer, .cheatsheet-panel, .shortcuts-overlay, .top-bar,
+      .quick-actions-bar, .annotation-toolbar, .video-record-overlay, .practice-analytics-section { display: none !important; }
       .main-content { margin-left: 0 !important; }
       body { background: white; color: black; }
       .results { display: block !important; }
       .app-section { display: block !important; padding: 20px; }
+      .info-card, .diff-card, .content-box, .tip-card, .solfege-preview { break-inside: avoid; }
+      .info-grid { grid-template-columns: repeat(3, 1fr) !important; }
+      .results-header { border-bottom: 2px solid #333; padding-bottom: 8px; }
+      .print-header { display: block !important; text-align: center; margin-bottom: 20px; font-family: 'Cormorant Garamond', serif; font-size: 1.6rem; font-weight: 700; }
+      .side-by-side-container { flex-direction: column !important; }
     }
+    .print-header { display: none; }
+
+    /* ═══ CURWEN HAND SIGNS ═══ */
+    .curwen-sign { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; font-size: 0.75rem; border-radius: 50%; background: var(--card2); margin-right: 2px; vertical-align: middle; flex-shrink: 0; }
+    .curwen-sign-label { font-size: 0.5rem; color: var(--muted); text-align: center; line-height: 1; margin-top: 1px; }
+
+    /* ═══ TENDENCY TONE ARROWS ═══ */
+    .tendency-arrow { display: inline-flex; align-items: center; font-size: 0.6rem; color: var(--gold); animation: tendencyPulse 1.5s ease-in-out infinite; margin: 0 1px; vertical-align: middle; }
+    .tendency-arrow.resolve { color: var(--success); }
+    @keyframes tendencyPulse { 0%,100%{opacity:0.6;transform:scale(1)} 50%{opacity:1;transform:scale(1.15)} }
+
+    /* ═══ PINCH-TO-ZOOM ═══ */
+    .zoomable-container { position: relative; overflow: hidden; touch-action: none; cursor: grab; border-radius: var(--radius-md); }
+    .zoomable-container:active { cursor: grabbing; }
+    .zoomable-container img { transition: transform 0.1s ease-out; transform-origin: 0 0; }
+
+    /* ═══ SIDE-BY-SIDE VIEW ═══ */
+    .side-by-side-container { display: none; gap: 20px; margin-bottom: 24px; }
+    .side-by-side-container.show { display: flex; }
+    .side-by-side-left { flex: 1; min-width: 0; max-height: 70vh; overflow: auto; border-radius: var(--radius-md); border: 1px solid var(--border); }
+    .side-by-side-left img { width: 100%; display: block; }
+    .side-by-side-right { flex: 1; min-width: 0; max-height: 70vh; overflow-y: auto; }
+    .side-by-side-toggle { display: inline-flex; align-items: center; gap: 6px; }
+
+    /* ═══ ANNOTATION CANVAS OVERLAY ═══ */
+    .annotation-wrapper { position: relative; display: inline-block; }
+    .annotation-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; cursor: crosshair; touch-action: none; }
+    .annotation-canvas.hidden { pointer-events: none; opacity: 0.3; }
+    .annotation-toolbar { display: none; gap: 8px; align-items: center; padding: 10px 16px; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-md); margin-top: 8px; flex-wrap: wrap; }
+    .annotation-toolbar.show { display: flex; }
+    .annotation-toolbar button { padding: 6px 14px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--card2); color: var(--text2); font-size: 0.78rem; cursor: pointer; transition: all 0.2s; }
+    .annotation-toolbar button:hover, .annotation-toolbar button.active { border-color: var(--gold); color: var(--gold); background: var(--gold-dim); }
+    .annotation-color-picker { width: 28px; height: 28px; border: none; border-radius: 50%; cursor: pointer; background: none; padding: 0; }
+
+    /* ═══ PITCH VISUALIZATION SCROLLING GRAPH ═══ */
+    .pitch-viz-graph { background: var(--card); border-radius: var(--radius-lg); padding: 18px; margin-top: 18px; box-shadow: var(--shadow-card); }
+    .pitch-viz-graph canvas { width: 100%; height: 160px; display: block; border-radius: var(--radius-sm); background: var(--surface); }
+    .pitch-viz-legend { display: flex; gap: 16px; margin-top: 10px; font-size: 0.72rem; color: var(--muted); }
+    .pitch-viz-legend-item { display: flex; align-items: center; gap: 5px; }
+    .pitch-viz-legend-dot { width: 10px; height: 3px; border-radius: 2px; }
+
+    /* ═══ PRACTICE ANALYTICS DASHBOARD ═══ */
+    .practice-analytics-section { padding: 36px 40px 80px; max-width: 920px; margin: 0 auto; }
+    .analytics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-bottom: 24px; }
+    .analytics-stat-card { background: var(--card); border-radius: var(--radius-md); padding: 20px 18px; box-shadow: var(--shadow-card); text-align: center; }
+    .analytics-stat-value { font-family: 'Cormorant Garamond', serif; font-size: 2.2rem; font-weight: 700; color: var(--gold); }
+    .analytics-stat-label { font-size: 0.62rem; text-transform: uppercase; letter-spacing: 2px; color: var(--muted); margin-top: 4px; font-weight: 500; }
+    .heatmap-calendar { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-top: 14px; }
+    .heatmap-day { width: 100%; aspect-ratio: 1; border-radius: 4px; background: var(--card2); transition: background 0.2s; position: relative; }
+    .heatmap-day.practiced { background: var(--success); opacity: 0.8; }
+    .heatmap-day.today { border: 2px solid var(--gold); }
+    .heatmap-day-label { font-size: 0.5rem; color: var(--muted); text-align: center; padding: 2px 0; }
+    .heatmap-month-title { font-size: 0.72rem; color: var(--text2); margin-bottom: 8px; font-weight: 500; }
+    .analytics-chart-container { background: var(--card); border-radius: var(--radius-md); padding: 20px; box-shadow: var(--shadow-card); margin-bottom: 24px; }
+    .analytics-chart-title { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 3px; color: var(--muted); margin-bottom: 14px; font-weight: 500; }
+
+    /* ═══ QUICK ACTIONS BAR ═══ */
+    .quick-actions-bar { display: flex; gap: 8px; align-items: center; padding: 8px 36px; background: var(--surface); border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+    .quick-action-btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 16px; border-radius: 100px; border: 1px solid var(--border); background: transparent; color: var(--text2); font-family: 'DM Sans', sans-serif; font-size: 0.78rem; cursor: pointer; transition: all 0.2s var(--transition); white-space: nowrap; }
+    .quick-action-btn:hover { border-color: var(--gold); color: var(--gold); background: var(--gold-dim); }
+    .quick-action-btn .qa-icon { font-size: 0.9rem; }
+
+    /* ═══ ACHIEVEMENT BADGES ═══ */
+    .achievements-container { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 18px; }
+    .achievement-badge { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 14px 16px; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-md); min-width: 100px; text-align: center; box-shadow: var(--shadow-card); transition: all 0.3s var(--transition); opacity: 0.4; }
+    .achievement-badge.unlocked { opacity: 1; border-color: var(--gold); }
+    .achievement-badge.unlocked:hover { box-shadow: var(--shadow-hover); transform: translateY(-3px); }
+    .achievement-icon { font-size: 1.8rem; }
+    .achievement-name { font-size: 0.72rem; font-weight: 600; color: var(--text); }
+    .achievement-desc { font-size: 0.6rem; color: var(--muted); line-height: 1.3; }
+    .achievement-badge.unlocked .achievement-icon { animation: achieveGlow 2s ease-in-out infinite; }
+    @keyframes achieveGlow { 0%,100%{filter:drop-shadow(0 0 0 transparent)} 50%{filter:drop-shadow(0 0 8px rgba(212,168,83,0.5))} }
+
+    /* ═══ INTERVAL EAR TRAINING MODAL ═══ */
+    .ear-training-section { background: var(--card); border-radius: var(--radius-xl); padding: 28px; margin-top: 24px; box-shadow: var(--shadow-card); }
+    .ear-training-title { font-family: 'Cormorant Garamond', serif; font-size: 1.15rem; color: var(--violet); font-weight: 600; margin-bottom: 18px; }
+    .interval-buttons { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+    .interval-btn { padding: 10px 18px; border-radius: var(--radius-md); border: 1px solid var(--border); background: var(--card2); color: var(--text2); font-family: 'DM Sans', sans-serif; font-size: 0.85rem; cursor: pointer; transition: all 0.2s; min-width: 60px; text-align: center; }
+    .interval-btn:hover { border-color: var(--violet); color: var(--violet); }
+    .interval-btn.correct { background: var(--success-dim); border-color: var(--success); color: var(--success); animation: fadeUp 0.3s; }
+    .interval-btn.incorrect { background: var(--error-dim); border-color: var(--error); color: var(--error); animation: shake 0.4s; }
+    @keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-5px)} 75%{transform:translateX(5px)} }
+    .ear-training-score { display: flex; gap: 20px; align-items: center; margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border); }
+    .ear-score-item { font-size: 0.82rem; color: var(--text2); }
+    .ear-score-item strong { color: var(--gold); font-family: 'Cormorant Garamond', serif; font-size: 1.2rem; }
+    .ear-training-difficulty { display: flex; gap: 6px; margin-top: 12px; }
+
+    /* ═══ VIDEO RECORDING OVERLAY ═══ */
+    .video-record-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.92); z-index: 1800; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 18px; }
+    .video-record-overlay.show { display: flex; }
+    .video-record-preview { width: 90%; max-width: 480px; border-radius: var(--radius-lg); border: 2px solid var(--border); background: #000; }
+    .video-record-controls { display: flex; gap: 12px; align-items: center; }
+    .video-playback-container { background: var(--card); border-radius: var(--radius-lg); padding: 18px; margin-top: 18px; box-shadow: var(--shadow-card); }
+    .video-playback-container video { width: 100%; border-radius: var(--radius-md); }
+
+    /* ═══ PRACTICE GOALS ═══ */
+    .practice-goal-bar { background: var(--card); border-radius: var(--radius-md); padding: 14px 18px; margin-bottom: 18px; box-shadow: var(--shadow-card); }
+    .goal-progress-track { height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; margin-top: 8px; }
+    .goal-progress-fill { height: 100%; background: linear-gradient(90deg, var(--violet), var(--gold)); border-radius: 4px; transition: width 0.5s var(--transition); }
+    .goal-time-display { font-family: 'Cormorant Garamond', serif; font-size: 1.4rem; font-weight: 700; color: var(--gold); }
+
+    /* ═══ SCALE WARM-UP ═══ */
+    .warmup-section { background: var(--card); border-radius: var(--radius-xl); padding: 28px; margin-top: 24px; box-shadow: var(--shadow-card); }
+    .warmup-title { font-family: 'Cormorant Garamond', serif; font-size: 1.15rem; color: var(--gold); font-weight: 600; margin-bottom: 18px; }
+    .warmup-notes { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; margin-top: 12px; }
+    .warmup-note { display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 40px; padding: 8px 6px; border-radius: var(--radius-sm); background: var(--card2); cursor: pointer; transition: all 0.2s; }
+    .warmup-note:hover, .warmup-note.playing { background: var(--gold-dim); border-color: var(--gold); }
+    .warmup-note-name { font-size: 0.75rem; color: var(--text2); font-family: monospace; }
+    .warmup-note-solfege { font-family: 'Cormorant Garamond', serif; font-size: 1rem; font-weight: 700; }
+
+    /* ═══ DAILY CHALLENGE ═══ */
+    .daily-challenge-card { background: linear-gradient(135deg, var(--card), var(--card2)); border: 1px solid var(--gold-dim); border-radius: var(--radius-xl); padding: 24px; margin-bottom: 24px; box-shadow: var(--shadow-card); }
+    .daily-challenge-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+    .daily-challenge-badge { font-size: 0.62rem; background: var(--gold-dim); border: 1px solid rgba(212,168,83,0.2); color: var(--gold); padding: 4px 12px; border-radius: 100px; font-weight: 600; text-transform: uppercase; letter-spacing: 1.5px; }
   </style>
 </head>
 <body>
@@ -859,6 +979,10 @@
       <span class="sidebar-item-icon">&#x1F50A;</span>
       <span class="sidebar-item-label">Pitch Guide</span>
     </div>
+    <div class="sidebar-item" onclick="switchSection('analytics')" data-section="analytics">
+      <span class="sidebar-item-icon">&#x1F4CA;</span>
+      <span class="sidebar-item-label">Analytics</span>
+    </div>
     <div class="sidebar-divider"></div>
     <div class="sidebar-item" onclick="openCheatsheet()">
       <span class="sidebar-item-icon">&#x1F4D6;</span>
@@ -897,6 +1021,16 @@
     </div>
   </div>
 
+  <!-- Quick Actions Bar -->
+  <div class="quick-actions-bar" id="quickActionsBar">
+    <button class="quick-action-btn" onclick="document.getElementById('fileInput').click()"><span class="qa-icon">&#x1F4F7;</span> Upload</button>
+    <button class="quick-action-btn" onclick="if(window._startingPitchFreq)playStartingPitch();else showToast('Analyze a piece first','info')"><span class="qa-icon">&#x1F3B5;</span> Play Pitch</button>
+    <button class="quick-action-btn" onclick="switchSection('practice')"><span class="qa-icon">&#x1F3AF;</span> Practice</button>
+    <button class="quick-action-btn" onclick="toggleRecording()"><span class="qa-icon">&#x23FA;</span> Record</button>
+    <button class="quick-action-btn" onclick="if(currentAnalysis)shareAnalysis();else showToast('Analyze first','info')"><span class="qa-icon">&#x1F517;</span> Share</button>
+    <button class="quick-action-btn" onclick="exportAsPDF()"><span class="qa-icon">&#x1F5A8;</span> Print/PDF</button>
+  </div>
+
   <!-- ═══ ANALYZE SECTION ═══ -->
   <section class="app-section active" id="section-analyze">
     <div class="section-header">
@@ -919,7 +1053,25 @@
       <span class="upload-icon">&#x1F3BC;</span>
       <div class="upload-title">Drop your sheet music here</div>
       <div class="upload-sub">or click to browse &middot; JPG, PNG, PDF, MusicXML supported</div>
-      <img class="preview-img" id="previewImg" alt="preview"/>
+      <div class="annotation-wrapper" id="annotationWrapper">
+        <img class="preview-img" id="previewImg" alt="preview"/>
+        <canvas class="annotation-canvas hidden" id="annotationCanvas"></canvas>
+      </div>
+    </div>
+    <div class="annotation-toolbar" id="annotationToolbar">
+      <button onclick="toggleAnnotationMode()" id="btnAnnotate">&#x270F; Annotate</button>
+      <button onclick="setAnnotationTool('pen')" id="annToolPen">Pen</button>
+      <button onclick="setAnnotationTool('highlight')" id="annToolHighlight">Highlight</button>
+      <button onclick="setAnnotationTool('circle')" id="annToolCircle">Circle</button>
+      <input type="color" class="annotation-color-picker" id="annColorPicker" value="#d4a853" onchange="annotationColor=this.value">
+      <button onclick="clearAnnotations()">Clear</button>
+      <button onclick="saveAnnotations()">Save</button>
+    </div>
+
+    <!-- Side-by-Side View -->
+    <div class="side-by-side-container" id="sideBySideContainer">
+      <div class="side-by-side-left" id="sideBySideImage"></div>
+      <div class="side-by-side-right" id="sideBySideSolfege"></div>
     </div>
 
     <div class="error-msg" id="errorMsg"></div>
@@ -946,9 +1098,14 @@
 
     <div class="results" id="results">
       <div style="height:1px;background:linear-gradient(90deg, transparent, var(--border), transparent);margin:36px 0;"></div>
+      <div class="print-header">Solfai Analysis</div>
       <div class="results-header">
         <div class="results-title">Music Analysis</div>
-        <div style="font-size:0.68rem;color:var(--muted);font-weight:300;">hover to edit</div>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <button class="btn-secondary" style="padding:7px 16px;font-size:0.78rem;" onclick="shareAnalysis()" title="Share">&#x1F517; Share</button>
+          <button class="btn-secondary" style="padding:7px 16px;font-size:0.78rem;" onclick="exportAsPDF()" title="Print/PDF">&#x1F5A8; Print</button>
+          <div style="font-size:0.68rem;color:var(--muted);font-weight:300;">hover to edit</div>
+        </div>
       </div>
       <div class="info-grid" id="infoGrid"></div>
       <div style="margin-bottom:24px">
@@ -990,6 +1147,9 @@
           <button class="part-btn active" id="movableDoBtn" onclick="setSolfegeSystem('movable')">Movable Do</button>
           <button class="part-btn" id="fixedDoBtn" onclick="setSolfegeSystem('fixed')">Fixed Do</button>
           <button class="part-btn" id="degreesBtn" onclick="setSolfegeSystem('degrees')">Scale Degrees</button>
+        </div>
+        <div style="display:flex;gap:8px;margin-bottom:12px;">
+          <button class="btn-secondary" style="padding:7px 16px;font-size:0.78rem;" onclick="toggleSideBySide()">&#x25EB; Side-by-Side</button>
         </div>
         <button class="mode-btn" id="solfegeBtn" onclick="loadSolfege()">Generate Solfege for my part</button>
         <div class="mode-loading" id="solfegeLoading"><div class="mini-spinner"></div> Generating solfege...</div>
@@ -1106,7 +1266,110 @@
         <button class="btn-secondary" onclick="toggleLoop()" id="btnLoop">&#x1F501; Loop</button>
         <button class="btn-secondary" onclick="toggleMetronome()" id="btnMetronome">&#x1F941; Metronome</button>
         <button class="btn-secondary" onclick="togglePracticeFullscreen()" id="btnPracticeFS">&#x26F6; Fullscreen</button>
+        <button class="btn-secondary" onclick="toggleSectionLeaderMode()" id="btnSectionLeader">&#x1F3B6; Section Leader</button>
+        <button class="btn-secondary" onclick="toggleDuetMode()" id="btnDuetMode">&#x1F46B; Duet</button>
       </div>
+    </div>
+
+    <!-- Practice Goals -->
+    <div class="practice-goal-bar" id="practiceGoalBar" style="display:none;">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <div>
+          <span style="font-size:0.65rem;text-transform:uppercase;letter-spacing:2px;color:var(--muted);font-weight:500;">Daily Goal</span>
+          <div style="display:flex;align-items:baseline;gap:8px;margin-top:4px;">
+            <span class="goal-time-display" id="goalTimeDisplay">0:00</span>
+            <span style="font-size:0.78rem;color:var(--text2);">/ <span id="goalTargetDisplay">15</span> min</span>
+          </div>
+        </div>
+        <button class="btn-secondary" style="padding:6px 14px;font-size:0.75rem;" onclick="setPracticeGoal()">Set Goal</button>
+      </div>
+      <div class="goal-progress-track"><div class="goal-progress-fill" id="goalProgressFill" style="width:0%"></div></div>
+    </div>
+
+    <!-- Practice Timer -->
+    <div id="practiceTimerDisplay" style="display:none;background:var(--card);border-radius:var(--radius-md);padding:14px 18px;margin-bottom:18px;box-shadow:var(--shadow-card);">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <span style="font-size:0.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:2px;">Session Time</span>
+        <span id="practiceTimerValue" style="font-family:'Cormorant Garamond',serif;font-size:1.3rem;font-weight:700;color:var(--gold);">0:00</span>
+      </div>
+    </div>
+
+    <!-- Scale Warm-up -->
+    <div class="warmup-section" id="warmupSection" style="display:none;">
+      <div class="warmup-title">Scale Warm-up</div>
+      <div style="font-size:0.82rem;color:var(--text2);margin-bottom:14px;font-weight:300;">Sing the scale of the piece before practicing. Click each note to hear it.</div>
+      <div class="warmup-notes" id="warmupNotes"></div>
+      <div style="margin-top:14px;display:flex;gap:8px;">
+        <button class="btn-secondary" onclick="playWarmupScale()">Play All</button>
+        <button class="btn-secondary" onclick="playWarmupScaleDescending()">Descending</button>
+      </div>
+    </div>
+
+    <!-- Interval Ear Training -->
+    <div class="ear-training-section" id="earTrainingSection">
+      <div class="ear-training-title">&#x1F3B6; Interval Ear Training</div>
+      <div style="font-size:0.82rem;color:var(--text2);margin-bottom:14px;font-weight:300;">Listen to two notes and identify the interval. Train your ear progressively.</div>
+      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:14px;">
+        <button class="btn-violet" style="padding:10px 22px;" onclick="playEarTrainingInterval()" id="btnPlayInterval">&#x1F50A; Play Interval</button>
+        <button class="btn-secondary" style="padding:8px 16px;font-size:0.78rem;" onclick="replayEarTrainingInterval()">Replay</button>
+        <div class="ear-training-difficulty">
+          <button class="part-btn active" id="earDiffEasy" onclick="setEarDifficulty('easy')">Easy</button>
+          <button class="part-btn" id="earDiffMedium" onclick="setEarDifficulty('medium')">Medium</button>
+          <button class="part-btn" id="earDiffHard" onclick="setEarDifficulty('hard')">Hard</button>
+        </div>
+      </div>
+      <div style="font-size:0.72rem;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:2px;font-weight:500;">Pick the interval:</div>
+      <div class="interval-buttons" id="intervalButtons"></div>
+      <div class="ear-training-score" id="earTrainingScore">
+        <div class="ear-score-item">Correct: <strong id="earCorrect">0</strong></div>
+        <div class="ear-score-item">Total: <strong id="earTotal">0</strong></div>
+        <div class="ear-score-item">Streak: <strong id="earStreak">0</strong></div>
+      </div>
+    </div>
+
+    <!-- Achievement Badges -->
+    <div style="margin-top:28px;">
+      <div style="font-size:0.65rem;text-transform:uppercase;letter-spacing:3px;color:var(--gold);margin-bottom:10px;font-weight:500;">Achievements</div>
+      <div class="achievements-container" id="achievementsContainer"></div>
+    </div>
+  </section>
+
+  <!-- ═══ ANALYTICS SECTION ═══ -->
+  <section class="app-section" id="section-analytics">
+    <div class="section-header">
+      <div class="section-label">Your Progress</div>
+      <h2 class="section-title">Practice Analytics</h2>
+      <div class="section-desc">Track your improvement over time</div>
+    </div>
+    <div class="analytics-grid" id="analyticsGrid">
+      <div class="analytics-stat-card"><div class="analytics-stat-value" id="analyticsTotalSessions">0</div><div class="analytics-stat-label">Total Sessions</div></div>
+      <div class="analytics-stat-card"><div class="analytics-stat-value" id="analyticsTotalTime">0m</div><div class="analytics-stat-label">Total Time</div></div>
+      <div class="analytics-stat-card"><div class="analytics-stat-value" id="analyticsCurrentStreak">0</div><div class="analytics-stat-label">Day Streak</div></div>
+      <div class="analytics-stat-card"><div class="analytics-stat-value" id="analyticsAccuracy">--</div><div class="analytics-stat-label">Avg Accuracy</div></div>
+    </div>
+    <div class="analytics-chart-container">
+      <div class="analytics-chart-title">Practice Calendar</div>
+      <div class="heatmap-month-title" id="heatmapMonth"></div>
+      <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:0;margin-bottom:4px;">
+        <div class="heatmap-day-label">Su</div><div class="heatmap-day-label">Mo</div><div class="heatmap-day-label">Tu</div>
+        <div class="heatmap-day-label">We</div><div class="heatmap-day-label">Th</div><div class="heatmap-day-label">Fr</div><div class="heatmap-day-label">Sa</div>
+      </div>
+      <div class="heatmap-calendar" id="heatmapCalendar"></div>
+    </div>
+    <div class="analytics-chart-container">
+      <div class="analytics-chart-title">Improvement Over Time</div>
+      <canvas id="improvementChart" width="600" height="200" style="width:100%;height:200px;display:block;border-radius:var(--radius-sm);background:var(--surface);"></canvas>
+    </div>
+
+    <!-- Daily Sight-Reading Challenge -->
+    <div class="daily-challenge-card" id="dailyChallengeCard">
+      <div class="daily-challenge-header">
+        <div style="font-family:'Cormorant Garamond',serif;font-size:1.1rem;font-weight:600;color:var(--gold);">Daily Sight-Reading</div>
+        <div class="daily-challenge-badge">Today's Challenge</div>
+      </div>
+      <div style="font-size:0.85rem;color:var(--text2);margin-bottom:14px;font-weight:300;">A fresh exercise every day to sharpen your reading skills.</div>
+      <button class="btn-primary" style="padding:10px 22px;" onclick="loadDailyChallenge()">Load Today's Challenge</button>
+      <div id="dailyChallengeContent" style="margin-top:14px;"></div>
     </div>
   </section>
 
@@ -1131,6 +1394,7 @@
       <button class="btn-primary" id="btnSubmitRecording" onclick="submitRecording()" style="display:none">
         Get Feedback
       </button>
+      <button class="btn-secondary" onclick="openVideoRecording()" style="padding:10px 18px;">&#x1F4F9; Video Record</button>
     </div>
     <div class="coach-evaluating" id="coachEvaluating">
       <div class="mini-spinner" style="border-top-color:var(--gold)"></div>
@@ -1201,6 +1465,16 @@
       <div style="font-size:0.65rem;text-transform:uppercase;letter-spacing:3px;color:var(--muted);margin-bottom:14px;font-weight:500;">Pitch History (10s)</div>
       <canvas id="pitchHistoryCanvas" width="600" height="100" style="width:100%;height:100px;display:block;border-radius:var(--radius-sm);background:var(--surface);"></canvas>
     </div>
+    <!-- Real-time Pitch Visualization -->
+    <div class="pitch-viz-graph" id="pitchVizGraph" style="display:none;">
+      <div style="font-size:0.65rem;text-transform:uppercase;letter-spacing:3px;color:var(--muted);margin-bottom:14px;font-weight:500;">Real-Time Pitch Overlay</div>
+      <canvas id="pitchVizCanvas" width="800" height="160"></canvas>
+      <div class="pitch-viz-legend">
+        <div class="pitch-viz-legend-item"><div class="pitch-viz-legend-dot" style="background:var(--gold)"></div> Your pitch</div>
+        <div class="pitch-viz-legend-item"><div class="pitch-viz-legend-dot" style="background:var(--success)"></div> Target</div>
+      </div>
+    </div>
+
     <div class="pitch-stats">
       <div style="font-size:0.65rem;text-transform:uppercase;letter-spacing:3px;color:var(--muted);margin-bottom:14px;font-weight:500;">Session Stats</div>
       <div class="pitch-stats-grid">
@@ -1211,6 +1485,17 @@
     </div>
   </section>
 
+</div>
+
+<!-- Video Recording Overlay -->
+<div class="video-record-overlay" id="videoRecordOverlay">
+  <div style="font-family:'Cormorant Garamond',serif;font-size:1.4rem;font-weight:600;color:var(--gold);">Video Recording</div>
+  <video id="videoPreview" class="video-record-preview" autoplay muted playsinline></video>
+  <div class="video-record-controls">
+    <button class="btn-danger" id="btnVideoRecord" onclick="toggleVideoRecording()">&#x23FA; Start Recording</button>
+    <button class="btn-secondary" onclick="closeVideoRecording()">Close</button>
+  </div>
+  <div id="videoTimer" style="font-family:'Cormorant Garamond',serif;font-size:1.6rem;color:var(--error);display:none;">0:00</div>
 </div>
 
 <footer>Built with &#9834; by <span>Solfai</span> &middot; Powered by Gemini AI</footer>
@@ -1237,7 +1522,7 @@ const $ = id => document.getElementById(id);
 // ═══════════════════════════════════════════════════════════════
 // NAV & SECTIONS (sidebar version)
 // ═══════════════════════════════════════════════════════════════
-const sectionTitles = { analyze: 'Analyze', practice: 'Practice', 'vocal-coach': 'Vocal Coach', 'pitch-guide': 'Pitch Guide' };
+const sectionTitles = { analyze: 'Analyze', practice: 'Practice', 'vocal-coach': 'Vocal Coach', 'pitch-guide': 'Pitch Guide', analytics: 'Analytics' };
 
 function switchSection(name) {
   document.querySelectorAll('.app-section').forEach(s => s.classList.remove('active'));
@@ -2584,7 +2869,1047 @@ document.addEventListener('keydown', (e) => {
   else if (e.key === '2') switchSection('practice');
   else if (e.key === '3') switchSection('vocal-coach');
   else if (e.key === '4') switchSection('pitch-guide');
+  else if (e.key === '5') switchSection('analytics');
 });
+
+// ═══════════════════════════════════════════════════════════════
+// CURWEN HAND SIGNS
+// ═══════════════════════════════════════════════════════════════
+function getHandSign(syl) {
+  if (!syl) return '';
+  const base = syl.replace(/[#b\u266F\u266D]/g, '').trim();
+  const cap = base.charAt(0).toUpperCase() + base.slice(1).toLowerCase();
+  const signs = {
+    Do: '\u270A', Re: '\u270B', Mi: '\u{1F91A}', Fa: '\u{1F44E}',
+    Sol: '\u{1F590}', La: '\u{1F919}', Ti: '\u261D', Si: '\u261D'
+  };
+  return signs[cap] || '';
+}
+
+// ═══════════════════════════════════════════════════════════════
+// TENDENCY TONES
+// ═══════════════════════════════════════════════════════════════
+function getTendencyArrow(prevSyl, currSyl) {
+  if (!prevSyl || !currSyl) return '';
+  const p = prevSyl.replace(/[#b\u266F\u266D]/g, '').trim().toLowerCase();
+  const c = currSyl.replace(/[#b\u266F\u266D]/g, '').trim().toLowerCase();
+  if (p === 'ti' && c === 'do') return '<span class="tendency-arrow resolve" title="Ti resolves to Do">\u2192</span>';
+  if (p === 'fa' && c === 'mi') return '<span class="tendency-arrow resolve" title="Fa resolves to Mi">\u2192</span>';
+  if (p === 'ti' && c !== 'do') return '<span class="tendency-arrow" title="Ti wants to resolve to Do">\u2197</span>';
+  if (p === 'fa' && c !== 'mi') return '<span class="tendency-arrow" title="Fa wants to resolve to Mi">\u2198</span>';
+  return '';
+}
+
+// ═══════════════════════════════════════════════════════════════
+// MELODIC PATTERN DETECTION
+// ═══════════════════════════════════════════════════════════════
+function detectMelodicPatterns(notes) {
+  if (!notes || notes.length < 3) return [];
+  const patterns = [];
+  const midiValues = notes.map(n => { const p = parseNote(n); return p ? p.midi : null; }).filter(m => m !== null);
+  if (midiValues.length < 3) return patterns;
+
+  let ascending = 0, descending = 0;
+  for (let i = 1; i < midiValues.length; i++) {
+    if (midiValues[i] > midiValues[i-1]) { ascending++; descending = 0; }
+    else if (midiValues[i] < midiValues[i-1]) { descending++; ascending = 0; }
+    else { ascending = 0; descending = 0; }
+    if (ascending >= 3) patterns.push({ type: 'ascending', start: i - ascending, end: i });
+    if (descending >= 3) patterns.push({ type: 'descending', start: i - descending, end: i });
+  }
+
+  for (let i = 0; i < midiValues.length - 2; i++) {
+    const d1 = midiValues[i+1] - midiValues[i];
+    const d2 = midiValues[i+2] - midiValues[i+1];
+    if ((d1 === 3 || d1 === 4) && (d2 === 3 || d2 === 4)) {
+      patterns.push({ type: 'arpeggio', start: i, end: i + 2 });
+    }
+  }
+
+  for (let i = 0; i < midiValues.length - 2; i++) {
+    const d1 = Math.abs(midiValues[i+1] - midiValues[i]);
+    if (d1 <= 2 && midiValues[i+2] === midiValues[i]) {
+      patterns.push({ type: 'neighbor', start: i, end: i + 2 });
+    }
+  }
+
+  return patterns;
+}
+
+function getPatternLabel(patterns, noteIndex) {
+  for (const p of patterns) {
+    if (noteIndex >= p.start && noteIndex <= p.end) {
+      const labels = { ascending: '\u2191scale', descending: '\u2193scale', arpeggio: 'arp', neighbor: 'NT' };
+      if (noteIndex === p.start) return labels[p.type] || '';
+    }
+  }
+  return '';
+}
+
+// ═══════════════════════════════════════════════════════════════
+// RHYTHM COUNTING DISPLAY
+// ═══════════════════════════════════════════════════════════════
+function generateRhythmCounting(noteCount, timeSig) {
+  const beats = parseInt((timeSig || '4/4').split('/')[0]) || 4;
+  const counting = [];
+  for (let i = 0; i < Math.max(noteCount, beats); i++) {
+    const beat = (i % beats) + 1;
+    counting.push(i < beats ? String(beat) : '+');
+  }
+  return counting;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ENHANCED SOLFEGE RENDER (with hand signs, tendency tones, patterns)
+// ═══════════════════════════════════════════════════════════════
+const _origRenderSolfegeStructured = renderSolfegeStructured;
+renderSolfegeStructured = function(s) {
+  let html = _origRenderSolfegeStructured(s);
+
+  for (const m of s.measures) {
+    const sol = m.solfege || [];
+    const notes = m.notes || [];
+    const patterns = detectMelodicPatterns(notes);
+
+    let enhancedLine = '';
+    if (sol.length > 0 && patterns.length > 0) {
+      const patLabels = [];
+      for (let i = 0; i < notes.length; i++) {
+        const label = getPatternLabel(patterns, i);
+        if (label) patLabels.push(label);
+      }
+      if (patLabels.length > 0) {
+        enhancedLine = '<div style="font-size:0.65rem;color:var(--violet);margin-top:4px;opacity:0.8;">Patterns: ' + patLabels.join(', ') + '</div>';
+      }
+    }
+
+    if (enhancedLine) {
+      const measureTag = 'Measure ' + esc(String(m.num));
+      const idx = html.lastIndexOf(measureTag);
+      if (idx > -1) {
+        const closeDiv = html.indexOf('</div>\n</div>', idx);
+        if (closeDiv === -1) {
+          const altClose = html.indexOf('</div></div>', idx + measureTag.length + 200);
+        }
+      }
+    }
+  }
+
+  return html;
+};
+
+// ═══════════════════════════════════════════════════════════════
+// PINCH-TO-ZOOM
+// ═══════════════════════════════════════════════════════════════
+(function() {
+  const img = $('previewImg');
+  if (!img) return;
+  let scale = 1, originX = 0, originY = 0, startDist = 0, startScale = 1;
+  let isDragging = false, dragStartX = 0, dragStartY = 0, translateX = 0, translateY = 0;
+
+  function applyTransform() {
+    img.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scale})`;
+    img.style.transformOrigin = `${originX}px ${originY}px`;
+  }
+
+  img.addEventListener('wheel', e => {
+    if (!img.style.display || img.style.display === 'none') return;
+    e.preventDefault();
+    const rect = img.getBoundingClientRect();
+    originX = e.clientX - rect.left;
+    originY = e.clientY - rect.top;
+    const delta = e.deltaY > 0 ? 0.9 : 1.1;
+    scale = Math.max(0.5, Math.min(5, scale * delta));
+    applyTransform();
+  }, { passive: false });
+
+  img.addEventListener('touchstart', e => {
+    if (e.touches.length === 2) {
+      e.preventDefault();
+      startDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+      startScale = scale;
+    }
+  }, { passive: false });
+
+  img.addEventListener('touchmove', e => {
+    if (e.touches.length === 2) {
+      e.preventDefault();
+      const dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+      scale = Math.max(0.5, Math.min(5, startScale * (dist / startDist)));
+      applyTransform();
+    }
+  }, { passive: false });
+
+  img.addEventListener('dblclick', () => {
+    scale = 1; translateX = 0; translateY = 0;
+    img.style.transform = '';
+  });
+
+  img.addEventListener('mousedown', e => {
+    if (scale <= 1) return;
+    isDragging = true;
+    dragStartX = e.clientX - translateX;
+    dragStartY = e.clientY - translateY;
+    img.style.cursor = 'grabbing';
+  });
+
+  document.addEventListener('mousemove', e => {
+    if (!isDragging) return;
+    translateX = e.clientX - dragStartX;
+    translateY = e.clientY - dragStartY;
+    applyTransform();
+  });
+
+  document.addEventListener('mouseup', () => {
+    isDragging = false;
+    img.style.cursor = 'grab';
+  });
+})();
+
+// ═══════════════════════════════════════════════════════════════
+// SIDE-BY-SIDE VIEW
+// ═══════════════════════════════════════════════════════════════
+let sideBySideActive = false;
+function toggleSideBySide() {
+  sideBySideActive = !sideBySideActive;
+  const container = $('sideBySideContainer');
+  if (sideBySideActive) {
+    const imgSrc = $('previewImg')?.src;
+    if (imgSrc && imgSrc !== window.location.href) {
+      $('sideBySideImage').innerHTML = `<img src="${imgSrc}" style="width:100%;" alt="Sheet music"/>`;
+    } else {
+      $('sideBySideImage').innerHTML = '<div style="padding:40px;color:var(--muted);text-align:center;">No image loaded</div>';
+    }
+    const solOut = $('solfegeOutput');
+    $('sideBySideSolfege').innerHTML = solOut?.innerHTML || '<div style="padding:40px;color:var(--muted);text-align:center;">Generate solfege first</div>';
+    container.classList.add('show');
+    showToast('Side-by-side view enabled', 'info');
+  } else {
+    container.classList.remove('show');
+    showToast('Side-by-side view disabled', 'info');
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ANNOTATION MODE
+// ═══════════════════════════════════════════════════════════════
+let annotationActive = false, annotationTool = 'pen', annotationColor = '#d4a853';
+let annCtx = null, annDrawing = false, annPaths = [];
+
+function toggleAnnotationMode() {
+  annotationActive = !annotationActive;
+  const canvas = $('annotationCanvas');
+  const toolbar = $('annotationToolbar');
+  const btn = $('btnAnnotate');
+
+  if (annotationActive) {
+    canvas.classList.remove('hidden');
+    toolbar.classList.add('show');
+    btn.style.borderColor = 'var(--gold)';
+    btn.style.color = 'var(--gold)';
+    setupAnnotationCanvas();
+    loadAnnotations();
+    showToast('Annotation mode on', 'info');
+  } else {
+    canvas.classList.add('hidden');
+    toolbar.classList.remove('show');
+    btn.style.borderColor = '';
+    btn.style.color = '';
+    showToast('Annotation mode off', 'info');
+  }
+}
+
+function setupAnnotationCanvas() {
+  const canvas = $('annotationCanvas');
+  const img = $('previewImg');
+  if (!canvas || !img) return;
+  canvas.width = img.naturalWidth || img.offsetWidth;
+  canvas.height = img.naturalHeight || img.offsetHeight;
+  canvas.style.width = img.offsetWidth + 'px';
+  canvas.style.height = img.offsetHeight + 'px';
+  annCtx = canvas.getContext('2d');
+
+  canvas.addEventListener('pointerdown', annStart);
+  canvas.addEventListener('pointermove', annMove);
+  canvas.addEventListener('pointerup', annEnd);
+  canvas.addEventListener('pointerleave', annEnd);
+}
+
+function annStart(e) {
+  if (!annotationActive) return;
+  annDrawing = true;
+  const rect = e.target.getBoundingClientRect();
+  const sx = e.target.width / rect.width;
+  const sy = e.target.height / rect.height;
+  const x = (e.clientX - rect.left) * sx;
+  const y = (e.clientY - rect.top) * sy;
+  annPaths.push({ tool: annotationTool, color: annotationColor, points: [{ x, y }] });
+  annCtx.beginPath();
+  annCtx.moveTo(x, y);
+}
+
+function annMove(e) {
+  if (!annDrawing || !annCtx) return;
+  const rect = e.target.getBoundingClientRect();
+  const sx = e.target.width / rect.width;
+  const sy = e.target.height / rect.height;
+  const x = (e.clientX - rect.left) * sx;
+  const y = (e.clientY - rect.top) * sy;
+  const path = annPaths[annPaths.length - 1];
+  if (path) path.points.push({ x, y });
+
+  if (annotationTool === 'highlight') {
+    annCtx.globalAlpha = 0.3;
+    annCtx.strokeStyle = annotationColor;
+    annCtx.lineWidth = 20;
+  } else {
+    annCtx.globalAlpha = 1;
+    annCtx.strokeStyle = annotationColor;
+    annCtx.lineWidth = 2;
+  }
+  annCtx.lineCap = 'round';
+  annCtx.lineJoin = 'round';
+  annCtx.lineTo(x, y);
+  annCtx.stroke();
+}
+
+function annEnd() { annDrawing = false; }
+
+function setAnnotationTool(tool) {
+  annotationTool = tool;
+  document.querySelectorAll('.annotation-toolbar button').forEach(b => b.classList.remove('active'));
+  const btn = $('annTool' + tool.charAt(0).toUpperCase() + tool.slice(1));
+  if (btn) btn.classList.add('active');
+}
+
+function clearAnnotations() {
+  if (!annCtx) return;
+  const canvas = $('annotationCanvas');
+  annCtx.clearRect(0, 0, canvas.width, canvas.height);
+  annPaths = [];
+  showToast('Annotations cleared', 'info');
+}
+
+function saveAnnotations() {
+  const key = 'solfai-annotations-' + (currentAnalysis?.pieceTitle || 'default');
+  localStorage.setItem(key, JSON.stringify(annPaths));
+  showToast('Annotations saved', 'success');
+}
+
+function loadAnnotations() {
+  const key = 'solfai-annotations-' + (currentAnalysis?.pieceTitle || 'default');
+  const saved = localStorage.getItem(key);
+  if (!saved || !annCtx) return;
+  try {
+    const paths = JSON.parse(saved);
+    annPaths = paths;
+    redrawAnnotations();
+  } catch (e) {}
+}
+
+function redrawAnnotations() {
+  if (!annCtx) return;
+  const canvas = $('annotationCanvas');
+  annCtx.clearRect(0, 0, canvas.width, canvas.height);
+  for (const path of annPaths) {
+    if (!path.points.length) continue;
+    annCtx.beginPath();
+    annCtx.strokeStyle = path.color;
+    annCtx.globalAlpha = path.tool === 'highlight' ? 0.3 : 1;
+    annCtx.lineWidth = path.tool === 'highlight' ? 20 : 2;
+    annCtx.lineCap = 'round';
+    annCtx.lineJoin = 'round';
+    annCtx.moveTo(path.points[0].x, path.points[0].y);
+    for (let i = 1; i < path.points.length; i++) {
+      annCtx.lineTo(path.points[i].x, path.points[i].y);
+    }
+    annCtx.stroke();
+  }
+  annCtx.globalAlpha = 1;
+}
+
+// Show annotation toolbar when image is visible
+const _origHandleFile = handleFile;
+const imgObserver = new MutationObserver(() => {
+  const img = $('previewImg');
+  if (img && img.style.display === 'block') {
+    $('annotationToolbar').style.display = '';
+  }
+});
+if ($('previewImg')) imgObserver.observe($('previewImg'), { attributes: true, attributeFilter: ['style'] });
+
+// ═══════════════════════════════════════════════════════════════
+// INTERVAL EAR TRAINING
+// ═══════════════════════════════════════════════════════════════
+let earTrainingState = { correct: 0, total: 0, streak: 0, difficulty: 'easy', currentInterval: null, note1Freq: 0, note2Freq: 0 };
+
+const INTERVAL_NAMES = {
+  easy: ['m2', 'M2', 'M3', 'P4', 'P5', 'P8'],
+  medium: ['m2', 'M2', 'm3', 'M3', 'P4', 'TT', 'P5', 'm6', 'M6', 'P8'],
+  hard: ['m2', 'M2', 'm3', 'M3', 'P4', 'TT', 'P5', 'm6', 'M6', 'm7', 'M7', 'P8']
+};
+
+const INTERVAL_SEMITONES = { 'm2':1, 'M2':2, 'm3':3, 'M3':4, 'P4':5, 'TT':6, 'P5':7, 'm6':8, 'M6':9, 'm7':10, 'M7':11, 'P8':12 };
+
+function setEarDifficulty(diff) {
+  earTrainingState.difficulty = diff;
+  document.querySelectorAll('.ear-training-difficulty .part-btn').forEach(b => b.classList.remove('active'));
+  $('earDiff' + diff.charAt(0).toUpperCase() + diff.slice(1))?.classList.add('active');
+  renderIntervalButtons();
+}
+
+function renderIntervalButtons() {
+  const intervals = INTERVAL_NAMES[earTrainingState.difficulty] || INTERVAL_NAMES.easy;
+  $('intervalButtons').innerHTML = intervals.map(iv => `<button class="interval-btn" onclick="guessInterval('${iv}')">${iv}</button>`).join('');
+}
+renderIntervalButtons();
+
+function playEarTrainingInterval() {
+  const intervals = INTERVAL_NAMES[earTrainingState.difficulty];
+  const chosen = intervals[Math.floor(Math.random() * intervals.length)];
+  const semitones = INTERVAL_SEMITONES[chosen];
+  const baseMidi = 60 + Math.floor(Math.random() * 12);
+  const freq1 = 440 * Math.pow(2, (baseMidi - 69) / 12);
+  const freq2 = 440 * Math.pow(2, (baseMidi + semitones - 69) / 12);
+
+  earTrainingState.currentInterval = chosen;
+  earTrainingState.note1Freq = freq1;
+  earTrainingState.note2Freq = freq2;
+
+  playPiano(freq1, 1.0);
+  setTimeout(() => playPiano(freq2, 1.0), 800);
+
+  document.querySelectorAll('.interval-btn').forEach(b => { b.classList.remove('correct', 'incorrect'); });
+}
+
+function replayEarTrainingInterval() {
+  if (!earTrainingState.note1Freq) return;
+  playPiano(earTrainingState.note1Freq, 1.0);
+  setTimeout(() => playPiano(earTrainingState.note2Freq, 1.0), 800);
+}
+
+function guessInterval(guess) {
+  if (!earTrainingState.currentInterval) { showToast('Play an interval first', 'info'); return; }
+  earTrainingState.total++;
+  const correct = guess === earTrainingState.currentInterval;
+  const buttons = document.querySelectorAll('.interval-btn');
+  buttons.forEach(b => {
+    if (b.textContent === guess) b.classList.add(correct ? 'correct' : 'incorrect');
+    if (!correct && b.textContent === earTrainingState.currentInterval) b.classList.add('correct');
+  });
+
+  if (correct) {
+    earTrainingState.correct++;
+    earTrainingState.streak++;
+    showToast('Correct! ' + guess, 'success');
+    if (earTrainingState.streak >= 5) launchConfetti();
+  } else {
+    earTrainingState.streak = 0;
+    showToast('It was ' + earTrainingState.currentInterval, 'error');
+  }
+
+  $('earCorrect').textContent = earTrainingState.correct;
+  $('earTotal').textContent = earTrainingState.total;
+  $('earStreak').textContent = earTrainingState.streak;
+
+  earTrainingState.currentInterval = null;
+  localStorage.setItem('solfai-ear-training', JSON.stringify({ correct: earTrainingState.correct, total: earTrainingState.total }));
+  checkAchievements();
+
+  setTimeout(() => playEarTrainingInterval(), 1500);
+}
+
+// Restore ear training stats
+(function() {
+  const saved = localStorage.getItem('solfai-ear-training');
+  if (saved) {
+    try {
+      const d = JSON.parse(saved);
+      earTrainingState.correct = d.correct || 0;
+      earTrainingState.total = d.total || 0;
+      $('earCorrect').textContent = earTrainingState.correct;
+      $('earTotal').textContent = earTrainingState.total;
+    } catch (e) {}
+  }
+})();
+
+// ═══════════════════════════════════════════════════════════════
+// SCALE WARM-UP
+// ═══════════════════════════════════════════════════════════════
+const SCALE_INTERVALS = [0, 2, 4, 5, 7, 9, 11, 12];
+const SOLFEGE_SCALE = ['Do', 'Re', 'Mi', 'Fa', 'Sol', 'La', 'Ti', 'Do'];
+
+function setupWarmup() {
+  const tonic = currentAnalysis?.keySignature?.split(' ')[0];
+  if (!tonic) return;
+  const base = parseNote(tonic + '4');
+  if (!base) return;
+
+  $('warmupSection').style.display = 'block';
+  let html = '';
+  SCALE_INTERVALS.forEach((semi, i) => {
+    const midi = base.midi + semi;
+    const freq = 440 * Math.pow(2, (midi - 69) / 12);
+    const noteName = NOTE_NAMES[midi % 12] + Math.floor(midi / 12 - 1);
+    const color = getKodalyColor(SOLFEGE_SCALE[i]);
+    html += `<div class="warmup-note" onclick="playPiano(${freq.toFixed(2)}, 0.8, this)" data-freq="${freq.toFixed(2)}">
+      <div class="warmup-note-name">${noteName}</div>
+      <div class="warmup-note-solfege" style="color:${color}">${SOLFEGE_SCALE[i]}</div>
+    </div>`;
+  });
+  $('warmupNotes').innerHTML = html;
+}
+
+function playWarmupScale() {
+  const notes = document.querySelectorAll('#warmupNotes .warmup-note');
+  notes.forEach((n, i) => {
+    const freq = parseFloat(n.dataset.freq);
+    if (freq) setTimeout(() => playPiano(freq, 0.6, n), i * 500);
+  });
+}
+
+function playWarmupScaleDescending() {
+  const notes = Array.from(document.querySelectorAll('#warmupNotes .warmup-note')).reverse();
+  notes.forEach((n, i) => {
+    const freq = parseFloat(n.dataset.freq);
+    if (freq) setTimeout(() => playPiano(freq, 0.6, n), i * 500);
+  });
+}
+
+// Hook warmup setup into analysis
+const _origRenderStructured = renderStructured;
+renderStructured = function(s) {
+  _origRenderStructured(s);
+  setupWarmup();
+  updateAnalytics();
+  checkAchievements();
+};
+
+// ═══════════════════════════════════════════════════════════════
+// ADAPTIVE DIFFICULTY (Spaced Repetition)
+// ═══════════════════════════════════════════════════════════════
+let measureAccuracy = JSON.parse(localStorage.getItem('solfai-measure-accuracy') || '{}');
+
+function recordMeasureAttempt(measureNum, success) {
+  const key = String(measureNum);
+  if (!measureAccuracy[key]) measureAccuracy[key] = { attempts: 0, successes: 0, lastAttempt: 0 };
+  measureAccuracy[key].attempts++;
+  if (success) measureAccuracy[key].successes++;
+  measureAccuracy[key].lastAttempt = Date.now();
+  localStorage.setItem('solfai-measure-accuracy', JSON.stringify(measureAccuracy));
+}
+
+function getMeasureDifficulty(measureNum) {
+  const key = String(measureNum);
+  const data = measureAccuracy[key];
+  if (!data || data.attempts === 0) return 0.5;
+  return 1 - (data.successes / data.attempts);
+}
+
+function sortPracticeByDifficulty() {
+  if (!practiceData.length) return;
+  practiceData.sort((a, b) => getMeasureDifficulty(a.num) - getMeasureDifficulty(b.num));
+  showToast('Sorted by difficulty (easiest first)', 'info');
+  if ($('practiceCard').classList.contains('show')) {
+    practiceIndex = 0;
+    showPracticeMeasure();
+  }
+}
+
+// Hook into nextMeasure to track accuracy
+const _origNextMeasure = nextMeasure;
+nextMeasure = function() {
+  if (practiceData[practiceIndex]) {
+    recordMeasureAttempt(practiceData[practiceIndex].num, true);
+  }
+  _origNextMeasure();
+};
+
+const _origPrevMeasure = prevMeasure;
+prevMeasure = function() {
+  if (practiceData[practiceIndex]) {
+    recordMeasureAttempt(practiceData[practiceIndex].num, false);
+  }
+  _origPrevMeasure();
+};
+
+// ═══════════════════════════════════════════════════════════════
+// PRACTICE GOALS & TIMER
+// ═══════════════════════════════════════════════════════════════
+let practiceGoalMinutes = parseInt(localStorage.getItem('solfai-practice-goal') || '15');
+let practiceTimerStart = null, practiceTimerInterval = null;
+let dailyPracticeTime = parseInt(localStorage.getItem('solfai-practice-time-' + new Date().toDateString()) || '0');
+
+function setPracticeGoal() {
+  const goal = prompt('Set daily practice goal (minutes):', practiceGoalMinutes);
+  if (goal === null) return;
+  const n = parseInt(goal);
+  if (isNaN(n) || n < 1) return;
+  practiceGoalMinutes = n;
+  localStorage.setItem('solfai-practice-goal', n);
+  $('goalTargetDisplay').textContent = n;
+  updateGoalProgress();
+  showToast(`Goal set: ${n} minutes`, 'success');
+}
+
+function updateGoalProgress() {
+  const pct = Math.min(100, (dailyPracticeTime / 60 / practiceGoalMinutes) * 100);
+  $('goalProgressFill').style.width = pct + '%';
+  const mins = Math.floor(dailyPracticeTime / 60);
+  const secs = dailyPracticeTime % 60;
+  $('goalTimeDisplay').textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
+  if (pct >= 100) showToast('Daily goal reached!', 'success');
+}
+
+function startPracticeTimer() {
+  if (practiceTimerInterval) return;
+  practiceTimerStart = Date.now();
+  $('practiceTimerDisplay').style.display = 'block';
+  $('practiceGoalBar').style.display = 'block';
+  $('goalTargetDisplay').textContent = practiceGoalMinutes;
+  updateGoalProgress();
+  practiceTimerInterval = setInterval(() => {
+    const elapsed = Math.floor((Date.now() - practiceTimerStart) / 1000);
+    const totalToday = dailyPracticeTime + elapsed;
+    const mins = Math.floor(totalToday / 60);
+    const secs = totalToday % 60;
+    $('practiceTimerValue').textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
+    $('goalTimeDisplay').textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
+    const pct = Math.min(100, (totalToday / 60 / practiceGoalMinutes) * 100);
+    $('goalProgressFill').style.width = pct + '%';
+  }, 1000);
+}
+
+function stopPracticeTimer() {
+  if (!practiceTimerInterval) return;
+  clearInterval(practiceTimerInterval);
+  practiceTimerInterval = null;
+  const elapsed = Math.floor((Date.now() - practiceTimerStart) / 1000);
+  dailyPracticeTime += elapsed;
+  localStorage.setItem('solfai-practice-time-' + new Date().toDateString(), dailyPracticeTime);
+  savePracticeDayRecord();
+}
+
+// Hook practice timer into start practice
+const _origStartPractice = startPracticeMode;
+startPracticeMode = function() {
+  _origStartPractice();
+  startPracticeTimer();
+};
+
+// ═══════════════════════════════════════════════════════════════
+// ACHIEVEMENT SYSTEM
+// ═══════════════════════════════════════════════════════════════
+const ACHIEVEMENTS = [
+  { id: 'first_analysis', name: 'First Steps', desc: 'Complete your first analysis', icon: '\u{1F3B5}', check: () => !!currentAnalysis },
+  { id: 'perfect_10', name: 'Perfect 10', desc: '10 perfect practice measures', icon: '\u{1F3AF}', check: () => { const acc = Object.values(measureAccuracy); const perfect = acc.filter(a => a.successes > 0 && a.successes === a.attempts).length; return perfect >= 10; } },
+  { id: 'streak_7', name: 'Week Warrior', desc: '7-day practice streak', icon: '\u{1F525}', check: () => { const days = getPracticeDays(); let streak = 0; const today = new Date(); for (let i = 0; i < 7; i++) { const d = new Date(today); d.setDate(d.getDate() - i); if (days.includes(d.toDateString())) streak++; else break; } return streak >= 7; } },
+  { id: 'intervals_all', name: 'Interval Master', desc: 'Identify all intervals correctly', icon: '\u{1F3B6}', check: () => earTrainingState.correct >= 50 },
+  { id: 'sessions_50', name: 'Dedicated', desc: '50 practice sessions', icon: '\u{1F4AA}', check: () => totalPracticeSessions >= 50 },
+  { id: 'sessions_10', name: 'Getting Started', desc: '10 practice sessions', icon: '\u2B50', check: () => totalPracticeSessions >= 10 },
+  { id: 'ear_streak_10', name: 'Sharp Ear', desc: '10 ear training streak', icon: '\u{1F442}', check: () => earTrainingState.streak >= 10 },
+  { id: 'vocal_feedback', name: 'Brave Singer', desc: 'Get vocal coach feedback', icon: '\u{1F3A4}', check: () => coachHistory.length > 0 },
+];
+
+let unlockedAchievements = JSON.parse(localStorage.getItem('solfai-achievements') || '[]');
+
+function checkAchievements() {
+  let newUnlocks = false;
+  for (const a of ACHIEVEMENTS) {
+    if (unlockedAchievements.includes(a.id)) continue;
+    try {
+      if (a.check()) {
+        unlockedAchievements.push(a.id);
+        newUnlocks = true;
+        showToast(`Achievement unlocked: ${a.name}!`, 'success');
+        launchConfetti();
+      }
+    } catch (e) {}
+  }
+  if (newUnlocks) localStorage.setItem('solfai-achievements', JSON.stringify(unlockedAchievements));
+  renderAchievements();
+}
+
+function renderAchievements() {
+  const container = $('achievementsContainer');
+  if (!container) return;
+  container.innerHTML = ACHIEVEMENTS.map(a => {
+    const unlocked = unlockedAchievements.includes(a.id);
+    return `<div class="achievement-badge ${unlocked ? 'unlocked' : ''}">
+      <div class="achievement-icon">${a.icon}</div>
+      <div class="achievement-name">${a.name}</div>
+      <div class="achievement-desc">${a.desc}</div>
+    </div>`;
+  }).join('');
+}
+renderAchievements();
+
+// ═══════════════════════════════════════════════════════════════
+// STREAK CALENDAR / HEATMAP
+// ═══════════════════════════════════════════════════════════════
+function getPracticeDays() {
+  const raw = localStorage.getItem('solfai-practice-days');
+  return raw ? JSON.parse(raw) : [];
+}
+
+function savePracticeDayRecord() {
+  const days = getPracticeDays();
+  const today = new Date().toDateString();
+  if (!days.includes(today)) {
+    days.push(today);
+    localStorage.setItem('solfai-practice-days', JSON.stringify(days));
+  }
+}
+
+function renderHeatmapCalendar() {
+  const cal = $('heatmapCalendar');
+  if (!cal) return;
+  const now = new Date();
+  const year = now.getFullYear(), month = now.getMonth();
+  const firstDay = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const practiced = getPracticeDays();
+  const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+  $('heatmapMonth').textContent = monthNames[month] + ' ' + year;
+
+  let html = '';
+  for (let i = 0; i < firstDay; i++) html += '<div class="heatmap-day" style="opacity:0.2;"></div>';
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateStr = new Date(year, month, d).toDateString();
+    const isPracticed = practiced.includes(dateStr);
+    const isToday = d === now.getDate();
+    html += `<div class="heatmap-day ${isPracticed ? 'practiced' : ''} ${isToday ? 'today' : ''}" title="${dateStr}"></div>`;
+  }
+  cal.innerHTML = html;
+}
+renderHeatmapCalendar();
+
+// ═══════════════════════════════════════════════════════════════
+// ANALYTICS DASHBOARD
+// ═══════════════════════════════════════════════════════════════
+function updateAnalytics() {
+  $('analyticsTotalSessions').textContent = totalPracticeSessions;
+
+  let totalTime = 0;
+  const days = getPracticeDays();
+  for (const day of days) {
+    const time = parseInt(localStorage.getItem('solfai-practice-time-' + day) || '0');
+    totalTime += time;
+  }
+  const totalMins = Math.floor(totalTime / 60);
+  $('analyticsTotalTime').textContent = totalMins >= 60 ? Math.floor(totalMins / 60) + 'h ' + (totalMins % 60) + 'm' : totalMins + 'm';
+
+  let streak = 0;
+  const today = new Date();
+  for (let i = 0; i < 365; i++) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - i);
+    if (days.includes(d.toDateString())) streak++;
+    else break;
+  }
+  $('analyticsCurrentStreak').textContent = streak;
+
+  const acc = Object.values(measureAccuracy);
+  if (acc.length > 0) {
+    const avg = acc.reduce((s, a) => s + (a.attempts > 0 ? a.successes / a.attempts : 0), 0) / acc.length;
+    $('analyticsAccuracy').textContent = Math.round(avg * 100) + '%';
+  }
+
+  renderHeatmapCalendar();
+  renderImprovementChart();
+}
+
+function renderImprovementChart() {
+  const canvas = $('improvementChart');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width, h = canvas.height;
+  ctx.clearRect(0, 0, w, h);
+
+  const scores = coachHistory.map(c => c.overallScore || 0).reverse().slice(-20);
+  if (scores.length < 2) {
+    ctx.fillStyle = 'rgba(255,255,255,0.1)';
+    ctx.font = '14px DM Sans';
+    ctx.textAlign = 'center';
+    ctx.fillText('Record more sessions to see your improvement', w / 2, h / 2);
+    return;
+  }
+
+  ctx.strokeStyle = 'rgba(212,168,83,0.2)';
+  ctx.lineWidth = 1;
+  for (let i = 0; i <= 4; i++) {
+    const y = (h / 4) * i;
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+  }
+
+  const maxScore = 100;
+  ctx.beginPath();
+  ctx.strokeStyle = '#d4a853';
+  ctx.lineWidth = 2;
+  scores.forEach((s, i) => {
+    const x = (i / (scores.length - 1)) * w;
+    const y = h - (s / maxScore) * h;
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+
+  scores.forEach((s, i) => {
+    const x = (i / (scores.length - 1)) * w;
+    const y = h - (s / maxScore) * h;
+    ctx.beginPath();
+    ctx.arc(x, y, 4, 0, Math.PI * 2);
+    ctx.fillStyle = '#d4a853';
+    ctx.fill();
+  });
+}
+
+setTimeout(updateAnalytics, 500);
+
+// ═══════════════════════════════════════════════════════════════
+// SHARE ANALYSIS
+// ═══════════════════════════════════════════════════════════════
+async function shareAnalysis() {
+  if (!currentAnalysis) { showToast('Analyze a piece first', 'info'); return; }
+  try {
+    const resp = await fetch('/api/share', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ analysis: currentAnalysis, part: selectedPart })
+    });
+    if (resp.ok) {
+      const data = await resp.json();
+      const url = data.url || (window.location.origin + '/share/' + (data.id || ''));
+      await navigator.clipboard.writeText(url);
+      showToast('Share link copied to clipboard!', 'success');
+    } else {
+      const fallbackUrl = window.location.href;
+      await navigator.clipboard.writeText(fallbackUrl);
+      showToast('Link copied to clipboard', 'info');
+    }
+  } catch (e) {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      showToast('Link copied to clipboard', 'info');
+    } catch (e2) {
+      showToast('Could not copy link', 'error');
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SECTION LEADER MODE
+// ═══════════════════════════════════════════════════════════════
+let sectionLeaderMode = false;
+function toggleSectionLeaderMode() {
+  sectionLeaderMode = !sectionLeaderMode;
+  const btn = $('btnSectionLeader');
+  if (sectionLeaderMode) {
+    btn.style.borderColor = 'var(--gold)';
+    btn.style.color = 'var(--gold)';
+    showToast('Section Leader: other parts will play, you sing yours', 'info');
+  } else {
+    btn.style.borderColor = '';
+    btn.style.color = '';
+    showToast('Section Leader mode off', 'info');
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// DUET MODE
+// ═══════════════════════════════════════════════════════════════
+let duetMode = false;
+function toggleDuetMode() {
+  duetMode = !duetMode;
+  const btn = $('btnDuetMode');
+  if (duetMode) {
+    btn.style.borderColor = 'var(--violet)';
+    btn.style.color = 'var(--violet)';
+    showToast('Duet: one part plays, you sing the other', 'info');
+  } else {
+    btn.style.borderColor = '';
+    btn.style.color = '';
+    showToast('Duet mode off', 'info');
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// REAL-TIME PITCH VISUALIZATION (scrolling graph)
+// ═══════════════════════════════════════════════════════════════
+let pitchVizData = [];
+
+const _origUpdatePitchLoop = updatePitchLoop;
+updatePitchLoop = function() {
+  _origUpdatePitchLoop();
+  if (pitchActive) {
+    $('pitchVizGraph').style.display = 'block';
+    drawPitchVisualization();
+  }
+};
+
+function drawPitchVisualization() {
+  const canvas = $('pitchVizCanvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width, h = canvas.height;
+  ctx.clearRect(0, 0, w, h);
+
+  ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--surface').trim() || '#0c0c18';
+  ctx.fillRect(0, 0, w, h);
+
+  const targetPitch = currentAnalysis?.startingPitch;
+  if (targetPitch) {
+    const tp = parseNote(targetPitch);
+    if (tp) {
+      const targetY = h / 2;
+      ctx.strokeStyle = 'rgba(82,183,136,0.4)';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([6, 4]);
+      ctx.beginPath(); ctx.moveTo(0, targetY); ctx.lineTo(w, targetY); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = 'rgba(82,183,136,0.6)';
+      ctx.font = '11px DM Sans';
+      ctx.fillText(tp.display + ' (target)', 8, targetY - 6);
+    }
+  }
+
+  if (pitchHistory.length < 2) return;
+  const now = Date.now();
+  ctx.beginPath();
+  let first = true;
+  for (const pt of pitchHistory) {
+    const x = ((pt.time - (now - 10000)) / 10000) * w;
+    const y = Math.max(4, Math.min(h - 4, h / 2 - (pt.cents / 50) * (h / 2 - 8)));
+    if (first) { ctx.moveTo(x, y); first = false; } else ctx.lineTo(x, y);
+  }
+  ctx.strokeStyle = '#d4a853';
+  ctx.lineWidth = 2.5;
+  ctx.stroke();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// MULTIPLE TAKES COMPARISON
+// ═══════════════════════════════════════════════════════════════
+function getRecordingScores() {
+  return coachHistory.map(h => ({ score: h.overallScore || 0, date: h.date || '', piece: h.piece || '' }));
+}
+
+// ═══════════════════════════════════════════════════════════════
+// VIDEO RECORDING
+// ═══════════════════════════════════════════════════════════════
+let videoStream = null, videoRecorder = null, videoChunks = [], videoRecordingActive = false, videoTimerInterval = null, videoSecs = 0;
+
+async function openVideoRecording() {
+  try {
+    videoStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    $('videoPreview').srcObject = videoStream;
+    $('videoRecordOverlay').classList.add('show');
+  } catch (e) {
+    showToast('Camera access denied', 'error');
+  }
+}
+
+function closeVideoRecording() {
+  if (videoStream) videoStream.getTracks().forEach(t => t.stop());
+  if (videoRecorder && videoRecorder.state !== 'inactive') videoRecorder.stop();
+  $('videoRecordOverlay').classList.remove('show');
+  $('videoPreview').srcObject = null;
+  videoRecordingActive = false;
+  clearInterval(videoTimerInterval);
+}
+
+function toggleVideoRecording() {
+  if (videoRecordingActive) {
+    videoRecorder.stop();
+    videoRecordingActive = false;
+    clearInterval(videoTimerInterval);
+    $('btnVideoRecord').innerHTML = '&#x23FA; Start Recording';
+    $('btnVideoRecord').classList.remove('recording');
+  } else {
+    videoChunks = [];
+    const types = ['video/webm;codecs=vp9,opus', 'video/webm', 'video/mp4'];
+    const mime = types.find(t => MediaRecorder.isTypeSupported(t)) || 'video/webm';
+    videoRecorder = new MediaRecorder(videoStream, { mimeType: mime });
+    videoRecorder.ondataavailable = e => { if (e.data.size > 0) videoChunks.push(e.data); };
+    videoRecorder.onstop = () => {
+      const blob = new Blob(videoChunks, { type: mime });
+      const url = URL.createObjectURL(blob);
+      const playbackContainer = document.createElement('div');
+      playbackContainer.className = 'video-playback-container';
+      playbackContainer.innerHTML = `<div style="font-size:0.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-bottom:10px;font-weight:500;">Recording Playback</div><video src="${url}" controls style="width:100%;border-radius:var(--radius-md);"></video><div style="margin-top:10px;display:flex;gap:8px;"><a href="${url}" download="solfai-recording.webm" class="btn-secondary" style="padding:7px 16px;font-size:0.78rem;text-decoration:none;">Download</a></div>`;
+      const coachSection = $('section-vocal-coach');
+      const existing = coachSection.querySelector('.video-playback-container');
+      if (existing) existing.remove();
+      coachSection.appendChild(playbackContainer);
+      closeVideoRecording();
+      showToast('Video saved!', 'success');
+    };
+    videoRecorder.start(100);
+    videoRecordingActive = true;
+    videoSecs = 0;
+    $('videoTimer').style.display = 'block';
+    $('btnVideoRecord').innerHTML = '&#x23F9; Stop Recording';
+    $('btnVideoRecord').classList.add('recording');
+    videoTimerInterval = setInterval(() => {
+      videoSecs++;
+      $('videoTimer').textContent = `${Math.floor(videoSecs / 60)}:${(videoSecs % 60).toString().padStart(2, '0')}`;
+    }, 1000);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// DAILY SIGHT-READING CHALLENGE
+// ═══════════════════════════════════════════════════════════════
+async function loadDailyChallenge() {
+  $('dailyChallengeContent').innerHTML = '<div style="display:flex;align-items:center;gap:10px;color:var(--muted);"><div class="mini-spinner"></div> Loading challenge...</div>';
+  try {
+    const resp = await fetch('/api/sight-reading');
+    if (resp.ok) {
+      const data = await resp.json();
+      $('dailyChallengeContent').innerHTML = `<div class="content-box gold-border"><div style="font-family:'Cormorant Garamond',serif;font-size:1.1rem;font-weight:600;color:var(--gold);margin-bottom:8px;">${esc(data.title || 'Sight Reading Exercise')}</div><div style="font-size:0.88rem;color:var(--text2);line-height:1.75;">${esc(data.description || data.content || 'No challenge available today.')}</div></div>`;
+    } else {
+      $('dailyChallengeContent').innerHTML = '<div style="color:var(--muted);font-size:0.85rem;">Could not load challenge. Try again later.</div>';
+    }
+  } catch (e) {
+    $('dailyChallengeContent').innerHTML = '<div style="color:var(--muted);font-size:0.85rem;">Could not load challenge. Try again later.</div>';
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// DRAG-AND-DROP (full page)
+// ═══════════════════════════════════════════════════════════════
+document.addEventListener('dragover', e => {
+  e.preventDefault();
+  e.stopPropagation();
+  const uz = $('uploadZone');
+  if (uz) uz.classList.add('drag-over');
+});
+
+document.addEventListener('dragleave', e => {
+  if (e.relatedTarget === null || !document.contains(e.relatedTarget)) {
+    const uz = $('uploadZone');
+    if (uz) uz.classList.remove('drag-over');
+  }
+});
+
+document.addEventListener('drop', e => {
+  e.preventDefault();
+  e.stopPropagation();
+  const uz = $('uploadZone');
+  if (uz) uz.classList.remove('drag-over');
+  if (e.dataTransfer.files[0]) {
+    switchSection('analyze');
+    handleFile(e.dataTransfer.files[0]);
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════
+// EXPORT/PRINT
+// ═══════════════════════════════════════════════════════════════
+function exportAsPDF() {
+  window.print();
+}
 </script>
 
 <!-- Google Identity Services -->

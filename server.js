@@ -7,8 +7,8 @@
 import express from 'express';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { createHash } from 'crypto';
-import { readFileSync, writeFileSync, existsSync, unlinkSync } from 'fs';
+import { createHash, randomUUID } from 'crypto';
+import { readFileSync, writeFileSync, existsSync, unlinkSync, mkdirSync } from 'fs';
 import sharp from 'sharp';
 import multer from 'multer';
 import AdmZip from 'adm-zip';
@@ -340,6 +340,110 @@ const CHOIR_PIECE_DATABASE = [
   { title: "Danny Boy", composer: "Traditional Irish", key: "Eb major", time: "4/4", sopranoStart: "Eb4", altoStart: "Bb3", tenorStart: "G3", bassStart: "Eb3" },
   { title: "Shenandoah", composer: "Traditional American", key: "F major", time: "4/4", sopranoStart: "C5", altoStart: "A4", tenorStart: "F4", bassStart: "F3" },
   { title: "Battle Hymn of the Republic", composer: "Steffe", key: "Bb major", time: "4/4", sopranoStart: "F4", altoStart: "D4", tenorStart: "Bb3", bassStart: "Bb3" },
+  // ─── EXPANDED: School Choir Standards ───
+  { title: "Cantate Domino", composer: "Pitoni", key: "D major", time: "4/4", sopranoStart: "D5", altoStart: "A4", tenorStart: "F#4", bassStart: "D3" },
+  { title: "Sicut Cervus", composer: "Palestrina", key: "C major", time: "4/4", sopranoStart: "G4", altoStart: "E4", tenorStart: "C4", bassStart: "C3" },
+  { title: "Ave Maria", composer: "Arcadelt", key: "C major", time: "4/4", sopranoStart: "E4", altoStart: "C4", tenorStart: "G3", bassStart: "C3" },
+  { title: "Jubilate Deo", composer: "Praetorius", key: "F major", time: "4/4", sopranoStart: "F4", altoStart: "C4", tenorStart: "A3", bassStart: "F3" },
+  { title: "Dona Nobis Pacem", composer: "Traditional", key: "F major", time: "3/4", sopranoStart: "C5", altoStart: "A4", tenorStart: "F4", bassStart: "F3" },
+  { title: "Ubi Caritas", composer: "Ola Gjeilo", key: "Eb major", time: "4/4", sopranoStart: "Bb4", altoStart: "G4", tenorStart: "Eb4", bassStart: "Bb3" },
+  { title: "Northern Lights", composer: "Ola Gjeilo", key: "D major", time: "4/4", sopranoStart: "A4", altoStart: "F#4", tenorStart: "D4", bassStart: "A3" },
+  { title: "The Ground", composer: "Ola Gjeilo", key: "F minor", time: "4/4", sopranoStart: "C5", altoStart: "Ab4", tenorStart: "F4", bassStart: "C3" },
+  { title: "Alleluia", composer: "Thompson", key: "G major", time: "4/4", sopranoStart: "D5", altoStart: "B4", tenorStart: "G4", bassStart: "G3" },
+  { title: "Choose Something Like a Star", composer: "Thompson", key: "Eb major", time: "4/4", sopranoStart: "Bb4", altoStart: "G4", tenorStart: "Eb4", bassStart: "Bb3" },
+  { title: "The Road Not Taken", composer: "Thompson", key: "C major", time: "4/4", sopranoStart: "E4", altoStart: "C4", tenorStart: "G3", bassStart: "C3" },
+  { title: "Frostiana - The Pasture", composer: "Thompson", key: "F major", time: "6/8", sopranoStart: "C5", altoStart: "A4", tenorStart: "F4", bassStart: "F3" },
+  { title: "Gloria", composer: "Rutter", key: "Bb major", time: "4/4", sopranoStart: "F5", altoStart: "D5", tenorStart: "Bb4", bassStart: "F3" },
+  { title: "Magnificat", composer: "Rutter", key: "D major", time: "4/4", sopranoStart: "D5", altoStart: "A4", tenorStart: "F#4", bassStart: "D3" },
+  { title: "This Is the Day", composer: "Rutter", key: "D major", time: "4/4", sopranoStart: "A4", altoStart: "F#4", tenorStart: "D4", bassStart: "D3" },
+  { title: "All Things Bright and Beautiful", composer: "Rutter", key: "G major", time: "4/4", sopranoStart: "D4", altoStart: "B3", tenorStart: "G3", bassStart: "G3" },
+  // ─── EXPANDED: Popular Arrangements ───
+  { title: "Can You Feel the Love Tonight", composer: "John/arr.", key: "Bb major", time: "4/4", sopranoStart: "F4", altoStart: "D4", tenorStart: "Bb3", bassStart: "Bb3" },
+  { title: "Circle of Life", composer: "John/arr.", key: "Bb major", time: "4/4", sopranoStart: "Bb4", altoStart: "F4", tenorStart: "D4", bassStart: "Bb3" },
+  { title: "Somewhere Over the Rainbow", composer: "Arlen/arr.", key: "Eb major", time: "4/4", sopranoStart: "Eb4", altoStart: "Bb3", tenorStart: "G3", bassStart: "Eb3" },
+  { title: "Bridge Over Troubled Water", composer: "Simon/arr.", key: "Eb major", time: "4/4", sopranoStart: "Bb4", altoStart: "G4", tenorStart: "Eb4", bassStart: "Bb3" },
+  { title: "Lean on Me", composer: "Withers/arr.", key: "C major", time: "4/4", sopranoStart: "E4", altoStart: "C4", tenorStart: "G3", bassStart: "C3" },
+  { title: "You Raise Me Up", composer: "Lovland/arr.", key: "Eb major", time: "4/4", sopranoStart: "Bb4", altoStart: "G4", tenorStart: "Eb4", bassStart: "Bb3" },
+  { title: "Hallelujah", composer: "Cohen/arr.", key: "C major", time: "6/8", sopranoStart: "E4", altoStart: "C4", tenorStart: "G3", bassStart: "C3" },
+  { title: "Fix You", composer: "Coldplay/arr.", key: "Eb major", time: "4/4", sopranoStart: "Bb4", altoStart: "G4", tenorStart: "Eb4", bassStart: "Bb3" },
+  { title: "Stand By Me", composer: "King/arr.", key: "A major", time: "4/4", sopranoStart: "A4", altoStart: "E4", tenorStart: "C#4", bassStart: "A3" },
+  { title: "Don't Stop Believin'", composer: "Journey/arr.", key: "E major", time: "4/4", sopranoStart: "B4", altoStart: "G#4", tenorStart: "E4", bassStart: "B3" },
+  { title: "Hey Jude", composer: "Beatles/arr.", key: "F major", time: "4/4", sopranoStart: "C5", altoStart: "A4", tenorStart: "F4", bassStart: "F3" },
+  { title: "Let It Be", composer: "Beatles/arr.", key: "C major", time: "4/4", sopranoStart: "G4", altoStart: "E4", tenorStart: "C4", bassStart: "C3" },
+  { title: "Imagine", composer: "Lennon/arr.", key: "C major", time: "4/4", sopranoStart: "E4", altoStart: "C4", tenorStart: "G3", bassStart: "C3" },
+  { title: "One Day More", composer: "Schonberg/arr.", key: "F major", time: "4/4", sopranoStart: "C5", altoStart: "A4", tenorStart: "F4", bassStart: "F3" },
+  { title: "Seasons of Love", composer: "Larson/arr.", key: "Bb major", time: "4/4", sopranoStart: "F4", altoStart: "D4", tenorStart: "Bb3", bassStart: "Bb3" },
+  { title: "When You Believe", composer: "Schwartz/arr.", key: "A minor", time: "4/4", sopranoStart: "E4", altoStart: "C4", tenorStart: "A3", bassStart: "A3" },
+  // ─── EXPANDED: Gospel ───
+  { title: "Oh Happy Day", composer: "Hawkins", key: "F major", time: "4/4", sopranoStart: "C5", altoStart: "A4", tenorStart: "F4", bassStart: "F3" },
+  { title: "Total Praise", composer: "Smallwood", key: "Db major", time: "4/4", sopranoStart: "Ab4", altoStart: "F4", tenorStart: "Db4", bassStart: "Db3" },
+  { title: "Order My Steps", composer: "Burleigh", key: "Eb major", time: "4/4", sopranoStart: "Bb4", altoStart: "G4", tenorStart: "Eb4", bassStart: "Eb3" },
+  { title: "His Eye Is on the Sparrow", composer: "Gabriel", key: "C major", time: "3/4", sopranoStart: "E4", altoStart: "C4", tenorStart: "G3", bassStart: "C3" },
+  { title: "How Great Is Our God", composer: "Tomlin/arr.", key: "C major", time: "4/4", sopranoStart: "G4", altoStart: "E4", tenorStart: "C4", bassStart: "C3" },
+  { title: "Baba Yetu", composer: "Tin", key: "D minor", time: "4/4", sopranoStart: "D5", altoStart: "A4", tenorStart: "F4", bassStart: "D3" },
+  { title: "10000 Reasons", composer: "Redman/arr.", key: "G major", time: "4/4", sopranoStart: "D4", altoStart: "B3", tenorStart: "G3", bassStart: "G3" },
+  { title: "Amazing Grace My Chains Are Gone", composer: "Tomlin/arr.", key: "G major", time: "3/4", sopranoStart: "D4", altoStart: "B3", tenorStart: "G3", bassStart: "G3" },
+  { title: "Cornerstone", composer: "Hillsong/arr.", key: "C major", time: "4/4", sopranoStart: "E4", altoStart: "C4", tenorStart: "G3", bassStart: "C3" },
+  { title: "In Christ Alone", composer: "Getty/arr.", key: "D major", time: "3/4", sopranoStart: "D4", altoStart: "A3", tenorStart: "F#3", bassStart: "D3" },
+  // ─── EXPANDED: World Music ───
+  { title: "Hine Ma Tov", composer: "Traditional Hebrew", key: "D minor", time: "4/4", sopranoStart: "A4", altoStart: "F4", tenorStart: "D4", bassStart: "D3" },
+  { title: "Shalom Chaverim", composer: "Traditional Hebrew", key: "D minor", time: "4/4", sopranoStart: "D4", altoStart: "A3", tenorStart: "F3", bassStart: "D3" },
+  { title: "Bashana Haba'ah", composer: "Hirsh", key: "A minor", time: "4/4", sopranoStart: "E4", altoStart: "C4", tenorStart: "A3", bassStart: "A3" },
+  { title: "Oseh Shalom", composer: "Traditional Hebrew", key: "D minor", time: "3/4", sopranoStart: "D5", altoStart: "A4", tenorStart: "F4", bassStart: "D3" },
+  { title: "Tshotsholoza", composer: "Traditional South African", key: "G major", time: "4/4", sopranoStart: "D5", altoStart: "B4", tenorStart: "G4", bassStart: "G3" },
+  { title: "Siyahamba", composer: "Traditional South African", key: "F major", time: "4/4", sopranoStart: "C5", altoStart: "A4", tenorStart: "F4", bassStart: "F3" },
+  { title: "Banuwa", composer: "Traditional Liberian", key: "F major", time: "4/4", sopranoStart: "C5", altoStart: "A4", tenorStart: "F4", bassStart: "F3" },
+  { title: "Nkosi Sikelel iAfrika", composer: "Sontonga", key: "Bb major", time: "4/4", sopranoStart: "F4", altoStart: "D4", tenorStart: "Bb3", bassStart: "Bb3" },
+  { title: "Arirang", composer: "Traditional Korean", key: "G major", time: "3/4", sopranoStart: "D5", altoStart: "B4", tenorStart: "G4", bassStart: "G3" },
+  { title: "Sakura", composer: "Traditional Japanese", key: "A minor", time: "4/4", sopranoStart: "E4", altoStart: "C4", tenorStart: "A3", bassStart: "A3" },
+  { title: "La Llorona", composer: "Traditional Mexican", key: "E minor", time: "3/4", sopranoStart: "E4", altoStart: "B3", tenorStart: "G3", bassStart: "E3" },
+  { title: "Guantanamera", composer: "Traditional Cuban", key: "C major", time: "4/4", sopranoStart: "G4", altoStart: "E4", tenorStart: "C4", bassStart: "C3" },
+  { title: "Hava Nagila", composer: "Traditional Hebrew", key: "E minor", time: "4/4", sopranoStart: "E4", altoStart: "B3", tenorStart: "G3", bassStart: "E3" },
+  { title: "Tuuliansen Alla", composer: "Traditional Finnish", key: "D minor", time: "3/4", sopranoStart: "A4", altoStart: "F4", tenorStart: "D4", bassStart: "D3" },
+  // ─── EXPANDED: Contest Pieces ───
+  { title: "The Battle of Jericho", composer: "Hogan", key: "D minor", time: "4/4", sopranoStart: "D5", altoStart: "A4", tenorStart: "F4", bassStart: "D3" },
+  { title: "Set Me as a Seal", composer: "Clausen", key: "Db major", time: "4/4", sopranoStart: "Ab4", altoStart: "F4", tenorStart: "Db4", bassStart: "Ab3" },
+  { title: "Stars", composer: "Esenvalds", key: "D major", time: "4/4", sopranoStart: "A4", altoStart: "F#4", tenorStart: "D4", bassStart: "D3" },
+  { title: "Only in Sleep", composer: "Esenvalds", key: "Ab major", time: "4/4", sopranoStart: "Eb5", altoStart: "C5", tenorStart: "Ab4", bassStart: "Ab3" },
+  { title: "Leonardo Dreams of His Flying Machine", composer: "Whitacre", key: "D minor", time: "4/4", sopranoStart: "D5", altoStart: "A4", tenorStart: "F4", bassStart: "D3" },
+  { title: "Cloudburst", composer: "Whitacre", key: "Ab major", time: "4/4", sopranoStart: "Ab4", altoStart: "Eb4", tenorStart: "C4", bassStart: "Ab3" },
+  { title: "Water Night", composer: "Whitacre", key: "Db major", time: "4/4", sopranoStart: "Ab4", altoStart: "F4", tenorStart: "Db4", bassStart: "Ab3" },
+  { title: "Daemon Irrepit Callidus", composer: "Gyongyosi", key: "G minor", time: "4/4", sopranoStart: "D5", altoStart: "Bb4", tenorStart: "G4", bassStart: "G3" },
+  { title: "Io Vivat", composer: "Lassus", key: "C major", time: "4/4", sopranoStart: "C5", altoStart: "G4", tenorStart: "E4", bassStart: "C3" },
+  { title: "Ave Verum Corpus", composer: "Byrd", key: "D major", time: "4/4", sopranoStart: "D5", altoStart: "A4", tenorStart: "F#4", bassStart: "D3" },
+  { title: "Ave Verum Corpus", composer: "Elgar", key: "Bb major", time: "4/4", sopranoStart: "F5", altoStart: "D5", tenorStart: "Bb4", bassStart: "F3" },
+  { title: "Festival Sanctus", composer: "Leavitt", key: "D major", time: "4/4", sopranoStart: "D5", altoStart: "A4", tenorStart: "F#4", bassStart: "D3" },
+  { title: "Ezekiel Saw the Wheel", composer: "Dawson", key: "G minor", time: "4/4", sopranoStart: "D5", altoStart: "Bb4", tenorStart: "G4", bassStart: "G3" },
+  { title: "There Will Be Rest", composer: "Ticheli", key: "Ab major", time: "4/4", sopranoStart: "Eb5", altoStart: "C5", tenorStart: "Ab4", bassStart: "Ab3" },
+  { title: "Earth Song", composer: "Ticheli", key: "Eb major", time: "4/4", sopranoStart: "Bb4", altoStart: "G4", tenorStart: "Eb4", bassStart: "Bb3" },
+  { title: "Simple Gifts", composer: "Copland/arr.", key: "F major", time: "2/4", sopranoStart: "C5", altoStart: "A4", tenorStart: "F4", bassStart: "F3" },
+  { title: "I Believe", composer: "Drake/arr.", key: "Eb major", time: "4/4", sopranoStart: "Eb4", altoStart: "Bb3", tenorStart: "G3", bassStart: "Eb3" },
+  { title: "The Awakening", composer: "Ellingboe", key: "F major", time: "4/4", sopranoStart: "C5", altoStart: "A4", tenorStart: "F4", bassStart: "C3" },
+  { title: "Will the Circle Be Unbroken", composer: "Traditional/arr.", key: "G major", time: "4/4", sopranoStart: "D4", altoStart: "B3", tenorStart: "G3", bassStart: "G3" },
+  { title: "Down to the River to Pray", composer: "Traditional/arr.", key: "F major", time: "4/4", sopranoStart: "A4", altoStart: "F4", tenorStart: "C4", bassStart: "F3" },
+  { title: "Plenty Good Room", composer: "Hogan", key: "Eb major", time: "4/4", sopranoStart: "Bb4", altoStart: "G4", tenorStart: "Eb4", bassStart: "Eb3" },
+  { title: "My Lord What a Morning", composer: "Burleigh/arr.", key: "F major", time: "4/4", sopranoStart: "C5", altoStart: "A4", tenorStart: "F4", bassStart: "F3" },
+  { title: "Entreat Me Not to Leave You", composer: "Gounod", key: "Bb major", time: "4/4", sopranoStart: "F5", altoStart: "D5", tenorStart: "Bb4", bassStart: "F3" },
+  { title: "The Music of Living", composer: "Forrest", key: "Ab major", time: "4/4", sopranoStart: "Eb5", altoStart: "C5", tenorStart: "Ab4", bassStart: "Ab3" },
+  { title: "Witness", composer: "Hogan", key: "C minor", time: "4/4", sopranoStart: "G4", altoStart: "Eb4", tenorStart: "C4", bassStart: "C3" },
+  { title: "Panis Angelicus", composer: "Franck", key: "A major", time: "4/4", sopranoStart: "E5", altoStart: "C#5", tenorStart: "A4", bassStart: "A3" },
+  { title: "Miserere Mei Deus", composer: "Allegri", key: "G minor", time: "4/4", sopranoStart: "G4", altoStart: "D4", tenorStart: "Bb3", bassStart: "G3" },
+  { title: "O Magnum Mysterium", composer: "Victoria", key: "F major", time: "4/4", sopranoStart: "C5", altoStart: "A4", tenorStart: "F4", bassStart: "F3" },
+  { title: "Bogoroditse Devo", composer: "Rachmaninoff", key: "Ab major", time: "4/4", sopranoStart: "Eb5", altoStart: "C5", tenorStart: "Ab4", bassStart: "Ab3" },
+  { title: "Now Thank We All Our God", composer: "Cruger/arr.", key: "F major", time: "4/4", sopranoStart: "F4", altoStart: "C4", tenorStart: "A3", bassStart: "F3" },
+  { title: "Shalom Rav", composer: "Friedman", key: "D minor", time: "4/4", sopranoStart: "D4", altoStart: "A3", tenorStart: "F3", bassStart: "D3" },
+  { title: "Adon Olam", composer: "Traditional Hebrew", key: "G major", time: "4/4", sopranoStart: "D4", altoStart: "B3", tenorStart: "G3", bassStart: "G3" },
+  { title: "Requiem Aeternam", composer: "Howells", key: "D minor", time: "4/4", sopranoStart: "A4", altoStart: "F4", tenorStart: "D4", bassStart: "D3" },
+  { title: "If Ye Love Me", composer: "Tallis", key: "F major", time: "4/4", sopranoStart: "F4", altoStart: "C4", tenorStart: "A3", bassStart: "F3" },
+  { title: "Hear My Prayer", composer: "Mendelssohn", key: "Bb major", time: "4/4", sopranoStart: "F5", altoStart: "D5", tenorStart: "Bb4", bassStart: "F3" },
+  { title: "O Nata Lux", composer: "Lauridsen", key: "D major", time: "4/4", sopranoStart: "F#4", altoStart: "D4", tenorStart: "A3", bassStart: "D3" },
+  { title: "Mid-Winter", composer: "Lauridsen", key: "F major", time: "6/8", sopranoStart: "C5", altoStart: "A4", tenorStart: "F4", bassStart: "C3" },
+  { title: "I Carry Your Heart", composer: "Stroope", key: "Ab major", time: "4/4", sopranoStart: "Eb5", altoStart: "C5", tenorStart: "Ab4", bassStart: "Ab3" },
+  { title: "She Walks in Beauty", composer: "Stroope", key: "Eb major", time: "4/4", sopranoStart: "Bb4", altoStart: "G4", tenorStart: "Eb4", bassStart: "Bb3" },
+  { title: "It Don't Mean a Thing", composer: "Ellington/arr.", key: "G minor", time: "4/4", sopranoStart: "D5", altoStart: "Bb4", tenorStart: "G4", bassStart: "G3" },
+  { title: "Come Alive", composer: "Pasek & Paul/arr.", key: "A major", time: "4/4", sopranoStart: "A4", altoStart: "E4", tenorStart: "C#4", bassStart: "A3" },
+  { title: "This Is Me", composer: "Pasek & Paul/arr.", key: "Bb major", time: "4/4", sopranoStart: "F4", altoStart: "D4", tenorStart: "Bb3", bassStart: "Bb3" },
+  { title: "A Million Dreams", composer: "Pasek & Paul/arr.", key: "G major", time: "4/4", sopranoStart: "D4", altoStart: "B3", tenorStart: "G3", bassStart: "G3" },
 ];
 
 function lookupPiece(title, composer) {
@@ -2212,6 +2316,1082 @@ app.post('/api/transpose', (req, res) => {
 
   console.log(`[Solfai] Transposed ${measures.length} measures from ${fromKey} to ${toKey}`);
   return res.json({ measures: transposed, key: toTonic, tonic: toTonic });
+});
+
+// ═══════════════════════════════════════════════════════════
+// FEATURE: Duration Validation
+// ═══════════════════════════════════════════════════════════
+
+const DURATION_VALUES = {
+  'whole': 4, 'half': 2, 'quarter': 1, 'eighth': 0.5,
+  'sixteenth': 0.25, '32nd': 0.125, 'dotted whole': 6,
+  'dotted half': 3, 'dotted quarter': 1.5, 'dotted eighth': 0.75,
+  'half triplet': 4 / 3, 'quarter triplet': 2 / 3, 'eighth triplet': 1 / 3,
+};
+
+function getBeatsPerMeasure(timeSig) {
+  if (!timeSig) return 4;
+  const [num, den] = timeSig.split('/').map(Number);
+  if (!num || !den) return 4;
+  return num * (4 / den);
+}
+
+app.post('/api/validate-durations', (req, res) => {
+  const { measures, timeSignature } = req.body;
+  if (!measures || !timeSignature) {
+    return res.status(400).json({ error: 'Missing measures or timeSignature' });
+  }
+
+  const expectedBeats = getBeatsPerMeasure(timeSignature);
+  const results = [];
+
+  for (const measure of measures) {
+    const num = measure.num || measure.measure;
+    const durations = measure.durations || [];
+    let totalBeats = 0;
+
+    for (const d of durations) {
+      const val = typeof d === 'number' ? d : (DURATION_VALUES[d?.toLowerCase()] || 0);
+      totalBeats += val;
+    }
+
+    const tolerance = 0.01;
+    const valid = Math.abs(totalBeats - expectedBeats) < tolerance;
+    results.push({
+      measure: num,
+      expectedBeats,
+      actualBeats: totalBeats,
+      valid,
+      difference: valid ? 0 : +(totalBeats - expectedBeats).toFixed(4),
+    });
+  }
+
+  const mismatches = results.filter(r => !r.valid);
+  console.log(`[Solfai] Duration validation: ${mismatches.length}/${results.length} mismatches for ${timeSignature}`);
+
+  return res.json({
+    timeSignature,
+    expectedBeatsPerMeasure: expectedBeats,
+    totalMeasures: results.length,
+    mismatchCount: mismatches.length,
+    results,
+    mismatches,
+  });
+});
+
+// ═══════════════════════════════════════════════════════════
+// FEATURE: Share Analysis
+// ═══════════════════════════════════════════════════════════
+
+const SHARED_DIR = join(__dirname, 'shared');
+try { mkdirSync(SHARED_DIR, { recursive: true }); } catch (e) { /* exists */ }
+
+app.post('/api/share', (req, res) => {
+  const { analysis } = req.body;
+  if (!analysis) return res.status(400).json({ error: 'No analysis data provided' });
+
+  const id = randomUUID().replace(/-/g, '').substring(0, 12);
+  const filePath = join(SHARED_DIR, `${id}.json`);
+  const payload = {
+    id,
+    analysis,
+    createdAt: new Date().toISOString(),
+    expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+  };
+
+  try {
+    writeFileSync(filePath, JSON.stringify(payload, null, 2));
+    console.log(`[Solfai] Shared analysis saved: ${id}`);
+    return res.json({ id, url: `/api/shared/${id}` });
+  } catch (err) {
+    console.error('[Solfai] Share save failed:', err.message);
+    return res.status(500).json({ error: 'Failed to save shared analysis' });
+  }
+});
+
+app.get('/api/shared/:id', (req, res) => {
+  const { id } = req.params;
+  if (!/^[a-z0-9]+$/i.test(id)) return res.status(400).json({ error: 'Invalid ID' });
+
+  const filePath = join(SHARED_DIR, `${id}.json`);
+  if (!existsSync(filePath)) return res.status(404).json({ error: 'Shared analysis not found' });
+
+  try {
+    const data = JSON.parse(readFileSync(filePath, 'utf8'));
+    if (new Date(data.expiresAt) < new Date()) {
+      try { unlinkSync(filePath); } catch (e) { /* ignore */ }
+      return res.status(410).json({ error: 'This shared analysis has expired' });
+    }
+    return res.json(data);
+  } catch (err) {
+    console.error('[Solfai] Share read failed:', err.message);
+    return res.status(500).json({ error: 'Failed to read shared analysis' });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════
+// FEATURE: Practice Analytics
+// ═══════════════════════════════════════════════════════════
+
+const ANALYTICS_DIR = join(__dirname, 'analytics');
+try { mkdirSync(ANALYTICS_DIR, { recursive: true }); } catch (e) { /* exists */ }
+
+app.post('/api/analytics', (req, res) => {
+  const { userId, piece, duration, measuresPracticed, accuracy, timestamp } = req.body;
+  if (!userId) return res.status(400).json({ error: 'Missing userId' });
+
+  const filePath = join(ANALYTICS_DIR, `${userId.replace(/[^a-z0-9_-]/gi, '_')}.json`);
+  let sessions = [];
+  try {
+    if (existsSync(filePath)) sessions = JSON.parse(readFileSync(filePath, 'utf8'));
+  } catch (e) { sessions = []; }
+
+  const session = {
+    id: randomUUID().replace(/-/g, '').substring(0, 8),
+    piece: piece || 'Unknown',
+    duration: duration || 0,
+    measuresPracticed: measuresPracticed || [],
+    accuracy: accuracy || null,
+    timestamp: timestamp || new Date().toISOString(),
+  };
+
+  sessions.push(session);
+  writeFileSync(filePath, JSON.stringify(sessions, null, 2));
+
+  console.log(`[Solfai] Analytics saved for ${userId}: ${session.piece} (${session.duration}s)`);
+  return res.json({ ok: true, session });
+});
+
+app.get('/api/analytics/:userId', (req, res) => {
+  const { userId } = req.params;
+  const filePath = join(ANALYTICS_DIR, `${userId.replace(/[^a-z0-9_-]/gi, '_')}.json`);
+
+  if (!existsSync(filePath)) {
+    return res.json({ userId, totalSessions: 0, totalDuration: 0, sessions: [], summary: {} });
+  }
+
+  try {
+    const sessions = JSON.parse(readFileSync(filePath, 'utf8'));
+    const totalDuration = sessions.reduce((sum, s) => sum + (s.duration || 0), 0);
+    const accuracies = sessions.filter(s => s.accuracy != null).map(s => s.accuracy);
+    const avgAccuracy = accuracies.length > 0
+      ? +(accuracies.reduce((a, b) => a + b, 0) / accuracies.length).toFixed(1)
+      : null;
+
+    const pieceCounts = {};
+    for (const s of sessions) {
+      pieceCounts[s.piece] = (pieceCounts[s.piece] || 0) + 1;
+    }
+
+    const streakDays = calculateStreak(sessions);
+
+    return res.json({
+      userId,
+      totalSessions: sessions.length,
+      totalDuration,
+      averageAccuracy: avgAccuracy,
+      streakDays,
+      pieceCounts,
+      recentSessions: sessions.slice(-20).reverse(),
+      summary: {
+        totalMinutes: +(totalDuration / 60).toFixed(1),
+        mostPracticedPiece: Object.entries(pieceCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || null,
+        sessionsThisWeek: sessions.filter(s => {
+          const d = new Date(s.timestamp);
+          const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+          return d >= weekAgo;
+        }).length,
+      },
+    });
+  } catch (err) {
+    console.error('[Solfai] Analytics read failed:', err.message);
+    return res.status(500).json({ error: 'Failed to read analytics' });
+  }
+});
+
+function calculateStreak(sessions) {
+  if (!sessions.length) return 0;
+  const days = new Set(sessions.map(s => new Date(s.timestamp).toISOString().split('T')[0]));
+  const sortedDays = [...days].sort().reverse();
+  let streak = 0;
+  const today = new Date().toISOString().split('T')[0];
+  let checkDate = new Date(today);
+
+  for (let i = 0; i < 365; i++) {
+    const dateStr = checkDate.toISOString().split('T')[0];
+    if (days.has(dateStr)) {
+      streak++;
+    } else if (i > 0) {
+      break;
+    }
+    checkDate.setDate(checkDate.getDate() - 1);
+  }
+  return streak;
+}
+
+// ═══════════════════════════════════════════════════════════
+// FEATURE: Warm-up Generator
+// ═══════════════════════════════════════════════════════════
+
+const WARM_UP_EXERCISES = {
+  highNotes: [
+    {
+      name: "Ascending Fifth Sirens",
+      instructions: "Slide from Do up to Sol on 'ooh', then back down. Start in your low register and move up by half steps.",
+      pattern: (startNote) => {
+        const midi = Note.midi(startNote);
+        if (midi === null) return [];
+        return [0, 2, 4, 5, 7].map(i => Note.fromMidi(midi + i));
+      },
+    },
+    {
+      name: "Octave Arpeggios",
+      instructions: "Sing Do-Mi-Sol-Do'-Sol-Mi-Do on 'ah'. Breathe at the top. Focus on head voice above the passaggio.",
+      pattern: (startNote) => {
+        const midi = Note.midi(startNote);
+        if (midi === null) return [];
+        return [0, 4, 7, 12, 7, 4, 0].map(i => Note.fromMidi(midi + i));
+      },
+    },
+    {
+      name: "Descending Scale from High",
+      instructions: "Start at the top of your range and descend stepwise on 'nee-nah-noh'. Keep the placement forward.",
+      pattern: (startNote) => {
+        const midi = Note.midi(startNote);
+        if (midi === null) return [];
+        return [12, 11, 9, 7, 5, 4, 2, 0].map(i => Note.fromMidi(midi + i));
+      },
+    },
+  ],
+  intervals: [
+    {
+      name: "Third Leaps",
+      instructions: "Sing Do-Mi, Re-Fa, Mi-Sol ascending by step. Use 'mah' for each note. Keep legato.",
+      pattern: (startNote) => {
+        const midi = Note.midi(startNote);
+        if (midi === null) return [];
+        return [0, 4, 2, 5, 4, 7, 5, 9].map(i => Note.fromMidi(midi + i));
+      },
+    },
+    {
+      name: "Fourth and Fifth Practice",
+      instructions: "Sing Do-Fa, Do-Sol, alternating. Use 'doo' for lower, 'dee' for upper.",
+      pattern: (startNote) => {
+        const midi = Note.midi(startNote);
+        if (midi === null) return [];
+        return [0, 5, 0, 7, 0, 5, 0, 7, 0].map(i => Note.fromMidi(midi + i));
+      },
+    },
+    {
+      name: "Octave Jumps",
+      instructions: "Sing Do-Do' on 'yah'. Drop the jaw on the high note. Move up by half steps.",
+      pattern: (startNote) => {
+        const midi = Note.midi(startNote);
+        if (midi === null) return [];
+        return [0, 12, 0, 12, 0].map(i => Note.fromMidi(midi + i));
+      },
+    },
+  ],
+  rhythm: [
+    {
+      name: "Syncopation Builder",
+      instructions: "Clap and count: 1-and-2-and-3-and-4-and. Then sing on a single pitch with 'ta' on the off-beats.",
+      pattern: (startNote) => {
+        const midi = Note.midi(startNote);
+        if (midi === null) return [];
+        return Array(8).fill(Note.fromMidi(midi));
+      },
+    },
+    {
+      name: "Dotted Rhythm Practice",
+      instructions: "Alternate long-short on a five-note scale. Think 'daah-dit, daah-dit'. Use a metronome.",
+      pattern: (startNote) => {
+        const midi = Note.midi(startNote);
+        if (midi === null) return [];
+        return [0, 2, 4, 5, 7].map(i => Note.fromMidi(midi + i));
+      },
+    },
+    {
+      name: "Triplet Flow",
+      instructions: "Sing Do-Re-Mi in triplets ascending the scale. Keep even subdivision. Use 'la-la-la'.",
+      pattern: (startNote) => {
+        const midi = Note.midi(startNote);
+        if (midi === null) return [];
+        return [0, 2, 4, 2, 4, 5, 4, 5, 7].map(i => Note.fromMidi(midi + i));
+      },
+    },
+  ],
+  breathing: [
+    {
+      name: "Long Tone Sustain",
+      instructions: "Breathe in for 4 counts, sustain 'ss' for 8 counts, then 'oo' for 8 counts. Gradually increase to 12 and 16.",
+      pattern: (startNote) => [startNote],
+    },
+    {
+      name: "Staccato Breath Control",
+      instructions: "Sing 8 short 'ha' on a single pitch, then sustain the 9th. Focus on diaphragm engagement.",
+      pattern: (startNote) => {
+        const midi = Note.midi(startNote);
+        if (midi === null) return [];
+        return Array(9).fill(Note.fromMidi(midi));
+      },
+    },
+  ],
+};
+
+app.post('/api/warmup', (req, res) => {
+  const { weaknesses, voicePart, key } = req.body;
+  const areas = weaknesses || ['breathing', 'intervals'];
+  const tonic = (key || 'C').replace(/\s*(major|minor)/i, '').trim();
+  const range = VOCAL_RANGES[voicePart || 'Soprano'] || VOCAL_RANGES['Soprano'];
+  const startMidi = Math.floor((range.low + range.high) / 2) - 3;
+  const startNote = Note.fromMidi(startMidi);
+
+  const exercises = [];
+
+  exercises.push({
+    name: "Lip Trills / Buzzing",
+    instructions: "Buzz your lips on a comfortable pitch and slide up and down a fifth. 4 repetitions.",
+    notes: [],
+    solfege: [],
+    category: "warmup",
+  });
+
+  for (const area of areas) {
+    const pool = WARM_UP_EXERCISES[area] || WARM_UP_EXERCISES.intervals;
+    for (const exercise of pool) {
+      const notes = exercise.pattern(startNote);
+      const solfege = notes.map(n => {
+        const pc = typeof n === 'string' ? n.replace(/\d+$/, '') : n;
+        return noteToSolfege(pc, tonic);
+      });
+      exercises.push({
+        name: exercise.name,
+        instructions: exercise.instructions,
+        notes,
+        solfege,
+        category: area,
+      });
+    }
+  }
+
+  exercises.push({
+    name: "Cool Down — Descending Sigh",
+    instructions: "Sigh from the top of your range to the bottom on 'hoo'. Let your voice relax completely.",
+    notes: [],
+    solfege: [],
+    category: "cooldown",
+  });
+
+  console.log(`[Solfai] Warmup generated: ${exercises.length} exercises for ${areas.join(', ')}`);
+  return res.json({ exercises, voicePart: voicePart || 'Soprano', key: tonic });
+});
+
+// ═══════════════════════════════════════════════════════════
+// FEATURE: Sight-Reading Generator
+// ═══════════════════════════════════════════════════════════
+
+const SCALE_INTERVALS = {
+  major: [0, 2, 4, 5, 7, 9, 11],
+  minor: [0, 2, 3, 5, 7, 8, 10],
+};
+
+function generateSightReading(difficulty, key, timeSig, numMeasures) {
+  const tonic = (key || 'C').replace(/\s*(major|minor)/i, '').trim();
+  const isMinor = (key || '').toLowerCase().includes('minor');
+  const scaleType = isMinor ? 'minor' : 'major';
+  const scale = SCALE_INTERVALS[scaleType];
+  const tonicMidi = Note.midi(tonic + '4') || 60;
+  const beatsPerMeasure = getBeatsPerMeasure(timeSig || '4/4');
+
+  const level = Math.max(1, Math.min(5, difficulty || 1));
+  const maxInterval = level <= 2 ? 4 : level <= 3 ? 7 : level <= 4 ? 9 : 12;
+  const allowAccidentals = level >= 4;
+  const rhythmComplexity = level;
+
+  const measures = [];
+  let prevScaleDeg = 0;
+
+  for (let m = 0; m < numMeasures; m++) {
+    const notes = [];
+    let beatsRemaining = beatsPerMeasure;
+
+    while (beatsRemaining > 0.24) {
+      let duration;
+      if (rhythmComplexity <= 2) {
+        duration = beatsRemaining >= 1 ? 1 : beatsRemaining;
+      } else if (rhythmComplexity <= 3) {
+        const choices = [0.5, 1, 1, 2].filter(d => d <= beatsRemaining);
+        duration = choices[Math.floor(Math.random() * choices.length)] || beatsRemaining;
+      } else {
+        const choices = [0.25, 0.5, 0.5, 1, 1, 1.5, 2].filter(d => d <= beatsRemaining);
+        duration = choices[Math.floor(Math.random() * choices.length)] || beatsRemaining;
+      }
+
+      let jump = Math.floor(Math.random() * 3) - 1;
+      if (level >= 3) jump = Math.floor(Math.random() * 5) - 2;
+      let newDeg = prevScaleDeg + jump;
+      newDeg = Math.max(-7, Math.min(14, newDeg));
+
+      const octaveOffset = Math.floor(newDeg / 7) * 12;
+      const scaleDeg = ((newDeg % 7) + 7) % 7;
+      const semitones = scale[scaleDeg] + octaveOffset;
+      let midi = tonicMidi + semitones;
+
+      if (allowAccidentals && Math.random() < 0.15) {
+        midi += Math.random() < 0.5 ? 1 : -1;
+      }
+
+      const noteName = Note.fromMidi(midi);
+      const durationName = duration >= 4 ? 'whole' : duration >= 2 ? 'half' :
+        duration >= 1.5 ? 'dotted quarter' : duration >= 1 ? 'quarter' :
+        duration >= 0.5 ? 'eighth' : 'sixteenth';
+
+      notes.push({
+        note: noteName,
+        duration: durationName,
+        beats: duration,
+      });
+
+      prevScaleDeg = newDeg;
+      beatsRemaining -= duration;
+    }
+
+    const noteNames = notes.map(n => n.note);
+    const solfege = noteNames.map(n => noteToSolfege(n.replace(/\d+$/, ''), tonic));
+
+    measures.push({
+      num: m + 1,
+      notes: noteNames,
+      durations: notes.map(n => n.duration),
+      solfege,
+    });
+  }
+
+  return measures;
+}
+
+app.post('/api/sight-reading', (req, res) => {
+  const { difficulty, key, timeSignature, measures: numMeasures } = req.body;
+  const measureCount = Math.max(4, Math.min(16, numMeasures || 4));
+  const timeSig = timeSignature || '4/4';
+  const keyName = key || 'C major';
+
+  const measures = generateSightReading(difficulty || 1, keyName, timeSig, measureCount);
+  const tonic = keyName.replace(/\s*(major|minor)/i, '').trim();
+
+  console.log(`[Solfai] Sight-reading generated: ${measureCount} measures, difficulty=${difficulty}, key=${keyName}`);
+
+  return res.json({
+    key: keyName,
+    tonic,
+    timeSignature: timeSig,
+    difficulty: difficulty || 1,
+    measures,
+    instructions: `Sight-read this ${measureCount}-measure melody in ${keyName}. ` +
+      `Time signature: ${timeSig}. Difficulty: ${difficulty || 1}/5. ` +
+      `Sing on solfege syllables, then try with 'la'.`,
+  });
+});
+
+// ═══════════════════════════════════════════════════════════
+// FEATURE: Chord Analysis
+// ═══════════════════════════════════════════════════════════
+
+const CHORD_TYPES = [
+  { intervals: [0, 4, 7], name: 'Major', symbol: '' },
+  { intervals: [0, 3, 7], name: 'minor', symbol: 'm' },
+  { intervals: [0, 3, 6], name: 'diminished', symbol: 'dim' },
+  { intervals: [0, 4, 8], name: 'augmented', symbol: 'aug' },
+  { intervals: [0, 4, 7, 11], name: 'Major 7th', symbol: 'maj7' },
+  { intervals: [0, 4, 7, 10], name: 'Dominant 7th', symbol: '7' },
+  { intervals: [0, 3, 7, 10], name: 'minor 7th', symbol: 'm7' },
+  { intervals: [0, 3, 6, 10], name: 'half-diminished 7th', symbol: 'm7b5' },
+  { intervals: [0, 3, 6, 9], name: 'diminished 7th', symbol: 'dim7' },
+  { intervals: [0, 5, 7], name: 'sus4', symbol: 'sus4' },
+  { intervals: [0, 2, 7], name: 'sus2', symbol: 'sus2' },
+];
+
+function identifyChord(noteNames) {
+  if (!noteNames || noteNames.length < 2) return null;
+
+  const midis = noteNames
+    .map(n => Note.midi(n))
+    .filter(m => m !== null)
+    .sort((a, b) => a - b);
+
+  if (midis.length < 2) return null;
+
+  const pcs = [...new Set(midis.map(m => m % 12))].sort((a, b) => a - b);
+
+  let bestMatch = null;
+  let bestScore = 0;
+
+  for (const root of pcs) {
+    const intervals = pcs.map(pc => ((pc - root) % 12 + 12) % 12).sort((a, b) => a - b);
+
+    for (const chord of CHORD_TYPES) {
+      const chordIntervals = chord.intervals;
+      const matching = chordIntervals.filter(ci => intervals.includes(ci)).length;
+      const score = matching / Math.max(chordIntervals.length, intervals.length);
+
+      if (score > bestScore) {
+        bestScore = score;
+        const NOTE_NAMES_FLAT = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'];
+        bestMatch = {
+          root: NOTE_NAMES_FLAT[root],
+          type: chord.name,
+          symbol: NOTE_NAMES_FLAT[root] + chord.symbol,
+          confidence: +(score * 100).toFixed(0),
+          notes: noteNames,
+          pitchClasses: pcs.map(pc => NOTE_NAMES_FLAT[pc]),
+        };
+      }
+    }
+  }
+
+  return bestMatch;
+}
+
+function analyzeChords(measures) {
+  const results = [];
+  for (const measure of measures) {
+    const notes = measure.notes || [];
+    if (notes.length === 0) continue;
+
+    const chord = identifyChord(notes);
+    results.push({
+      measure: measure.num || null,
+      chord: chord ? chord.symbol : 'N/C',
+      type: chord ? chord.type : null,
+      root: chord ? chord.root : null,
+      confidence: chord ? chord.confidence : 0,
+      notes,
+    });
+  }
+  return results;
+}
+
+app.post('/api/chord-analysis', (req, res) => {
+  const { measures } = req.body;
+  if (!measures || !Array.isArray(measures)) {
+    return res.status(400).json({ error: 'Missing or invalid measures array' });
+  }
+
+  const chords = analyzeChords(measures);
+
+  const chordProgression = chords.map(c => c.chord).join(' - ');
+  console.log(`[Solfai] Chord analysis: ${chords.length} chords identified`);
+
+  return res.json({
+    chords,
+    progression: chordProgression,
+    totalChords: chords.length,
+  });
+});
+
+// ═══════════════════════════════════════════════════════════
+// FEATURE: IPA Pronunciation (rules-based, no AI)
+// ═══════════════════════════════════════════════════════════
+
+const IPA_RULES = {
+  latin: {
+    replacements: [
+      [/ae/gi, 'ɛ'], [/oe/gi, 'e'], [/au/gi, 'aʊ'],
+      [/qu/gi, 'kw'], [/gn/gi, 'ɲ'],
+      [/ce/gi, 'tʃe'], [/ci/gi, 'tʃi'], [/cy/gi, 'tʃi'],
+      [/ch/gi, 'k'], [/ph/gi, 'f'], [/th/gi, 't'],
+      [/sc([ei])/gi, 'ʃ$1'],
+      [/x/gi, 'ks'],
+      [/c(?=[aou])/gi, 'k'], [/c(?=[ei])/gi, 'tʃ'], [/c$/gi, 'k'],
+      [/j/gi, 'j'], [/v/gi, 'v'],
+      [/a/gi, 'a'], [/e/gi, 'e'], [/i/gi, 'i'], [/o/gi, 'o'], [/u/gi, 'u'],
+      [/b/gi, 'b'], [/d/gi, 'd'], [/f/gi, 'f'], [/g/gi, 'ɡ'],
+      [/k/gi, 'k'], [/l/gi, 'l'], [/m/gi, 'm'], [/n/gi, 'n'],
+      [/p/gi, 'p'], [/r/gi, 'r'], [/s/gi, 's'], [/t/gi, 't'],
+    ],
+  },
+  italian: {
+    replacements: [
+      [/gli/gi, 'ʎi'], [/gn/gi, 'ɲ'],
+      [/sch/gi, 'sk'],
+      [/sc([ei])/gi, 'ʃ$1'], [/sc([aou])/gi, 'sk$1'],
+      [/ch([ei])/gi, 'k$1'], [/ci([aou])/gi, 'tʃ$1'],
+      [/ce/gi, 'tʃe'], [/ci/gi, 'tʃi'],
+      [/c([aou])/gi, 'k$1'], [/c$/gi, 'k'],
+      [/gh([ei])/gi, 'ɡ$1'], [/gi([aou])/gi, 'dʒ$1'],
+      [/ge/gi, 'dʒe'], [/gi/gi, 'dʒi'],
+      [/g([aou])/gi, 'ɡ$1'],
+      [/zz/gi, 'tts'], [/z/gi, 'dz'],
+      [/ss/gi, 'ss'], [/s(?=[aeiou])/gi, 'z'],
+      [/rr/gi, 'rr'], [/ll/gi, 'll'], [/mm/gi, 'mm'], [/nn/gi, 'nn'],
+      [/qu/gi, 'kw'],
+      [/a/gi, 'a'], [/e/gi, 'e'], [/i/gi, 'i'], [/o/gi, 'o'], [/u/gi, 'u'],
+      [/b/gi, 'b'], [/d/gi, 'd'], [/f/gi, 'f'], [/h/gi, ''],
+      [/k/gi, 'k'], [/l/gi, 'l'], [/m/gi, 'm'], [/n/gi, 'n'],
+      [/p/gi, 'p'], [/r/gi, 'r'], [/s/gi, 's'], [/t/gi, 't'], [/v/gi, 'v'],
+    ],
+  },
+  german: {
+    replacements: [
+      [/sch/gi, 'ʃ'], [/tsch/gi, 'tʃ'], [/ch(?=[ei])/gi, 'ç'], [/ch/gi, 'x'],
+      [/sp/gi, 'ʃp'], [/st/gi, 'ʃt'],
+      [/ck/gi, 'k'], [/pf/gi, 'pf'], [/tz/gi, 'ts'],
+      [/ei/gi, 'aɪ'], [/ie/gi, 'iː'], [/eu/gi, 'ɔʏ'], [/äu/gi, 'ɔʏ'],
+      [/au/gi, 'aʊ'],
+      [/ä/gi, 'ɛ'], [/ö/gi, 'ø'], [/ü/gi, 'y'], [/ß/gi, 's'],
+      [/z/gi, 'ts'], [/w/gi, 'v'], [/v/gi, 'f'], [/j/gi, 'j'],
+      [/s(?=[aeiou])/gi, 'z'],
+      [/a/gi, 'a'], [/e/gi, 'ə'], [/i/gi, 'ɪ'], [/o/gi, 'o'], [/u/gi, 'ʊ'],
+      [/b/gi, 'b'], [/d/gi, 'd'], [/f/gi, 'f'], [/g/gi, 'ɡ'], [/h/gi, 'h'],
+      [/k/gi, 'k'], [/l/gi, 'l'], [/m/gi, 'm'], [/n/gi, 'n'],
+      [/p/gi, 'p'], [/r/gi, 'ʁ'], [/t/gi, 't'],
+    ],
+  },
+  french: {
+    replacements: [
+      [/eau/gi, 'o'], [/au/gi, 'o'], [/ou/gi, 'u'],
+      [/oi/gi, 'wa'], [/ai/gi, 'ɛ'], [/ei/gi, 'ɛ'],
+      [/an/gi, 'ɑ̃'], [/en/gi, 'ɑ̃'], [/am/gi, 'ɑ̃'], [/em/gi, 'ɑ̃'],
+      [/in/gi, 'ɛ̃'], [/im/gi, 'ɛ̃'], [/ain/gi, 'ɛ̃'], [/ein/gi, 'ɛ̃'],
+      [/on/gi, 'ɔ̃'], [/om/gi, 'ɔ̃'],
+      [/un/gi, 'œ̃'], [/um/gi, 'œ̃'],
+      [/eu/gi, 'ø'], [/oeu/gi, 'œ'],
+      [/ch/gi, 'ʃ'], [/gn/gi, 'ɲ'], [/ph/gi, 'f'], [/th/gi, 't'],
+      [/qu/gi, 'k'], [/gu(?=[ei])/gi, 'ɡ'],
+      [/c([ei])/gi, 's$1'], [/ç/gi, 's'],
+      [/c([aou])/gi, 'k$1'], [/c$/gi, 'k'],
+      [/g([ei])/gi, 'ʒ$1'], [/g([aou])/gi, 'ɡ$1'],
+      [/j/gi, 'ʒ'], [/ll/gi, 'j'],
+      [/é/gi, 'e'], [/è/gi, 'ɛ'], [/ê/gi, 'ɛ'], [/ë/gi, 'ɛ'],
+      [/â/gi, 'ɑ'], [/î/gi, 'i'], [/ô/gi, 'o'], [/û/gi, 'y'],
+      [/a/gi, 'a'], [/e$/gi, ''], [/e/gi, 'ə'], [/i/gi, 'i'], [/o/gi, 'ɔ'], [/u/gi, 'y'],
+      [/b/gi, 'b'], [/d/gi, 'd'], [/f/gi, 'f'], [/h/gi, ''],
+      [/k/gi, 'k'], [/l/gi, 'l'], [/m/gi, 'm'], [/n/gi, 'n'],
+      [/p/gi, 'p'], [/r/gi, 'ʁ'], [/s/gi, 's'], [/t/gi, 't'], [/v/gi, 'v'],
+      [/x/gi, 'ks'], [/z/gi, 'z'],
+    ],
+  },
+  spanish: {
+    replacements: [
+      [/ch/gi, 'tʃ'], [/ll/gi, 'ʎ'], [/rr/gi, 'r'],
+      [/ñ/gi, 'ɲ'], [/qu/gi, 'k'],
+      [/gu([ei])/gi, 'ɡ$1'], [/gü([ei])/gi, 'ɡw$1'],
+      [/c([ei])/gi, 's$1'], [/c([aou])/gi, 'k$1'], [/c$/gi, 'k'],
+      [/g([ei])/gi, 'x$1'], [/g([aou])/gi, 'ɡ$1'],
+      [/j/gi, 'x'], [/h/gi, ''], [/v/gi, 'b'], [/z/gi, 's'],
+      [/á/gi, 'a'], [/é/gi, 'e'], [/í/gi, 'i'], [/ó/gi, 'o'], [/ú/gi, 'u'],
+      [/a/gi, 'a'], [/e/gi, 'e'], [/i/gi, 'i'], [/o/gi, 'o'], [/u/gi, 'u'],
+      [/b/gi, 'b'], [/d/gi, 'd'], [/f/gi, 'f'],
+      [/k/gi, 'k'], [/l/gi, 'l'], [/m/gi, 'm'], [/n/gi, 'n'],
+      [/p/gi, 'p'], [/r/gi, 'ɾ'], [/s/gi, 's'], [/t/gi, 't'],
+      [/x/gi, 'ks'], [/y/gi, 'ʝ'], [/w/gi, 'w'],
+    ],
+  },
+  hebrew: {
+    replacements: [
+      [/sh/gi, 'ʃ'], [/ch/gi, 'x'], [/kh/gi, 'x'], [/ts/gi, 'ts'], [/tz/gi, 'ts'],
+      [/th/gi, 't'],
+      [/a/gi, 'a'], [/e/gi, 'e'], [/i/gi, 'i'], [/o/gi, 'o'], [/u/gi, 'u'],
+      [/b/gi, 'b'], [/d/gi, 'd'], [/f/gi, 'f'], [/g/gi, 'ɡ'], [/h/gi, 'h'],
+      [/k/gi, 'k'], [/l/gi, 'l'], [/m/gi, 'm'], [/n/gi, 'n'],
+      [/p/gi, 'p'], [/r/gi, 'ʁ'], [/s/gi, 's'], [/t/gi, 't'], [/v/gi, 'v'],
+      [/y/gi, 'j'], [/z/gi, 'z'],
+    ],
+  },
+};
+
+function textToIPA(text, language) {
+  const lang = (language || 'latin').toLowerCase();
+  const rules = IPA_RULES[lang];
+  if (!rules) return text.toLowerCase();
+
+  const words = text.split(/\s+/).filter(Boolean);
+  return words.map(word => {
+    let result = word.toLowerCase();
+    for (const [pattern, replacement] of rules.replacements) {
+      result = result.replace(pattern, replacement);
+    }
+    return result;
+  }).join(' ');
+}
+
+app.post('/api/pronunciation', (req, res) => {
+  const { text, language } = req.body;
+  if (!text) return res.status(400).json({ error: 'No text provided' });
+
+  const lang = (language || 'latin').toLowerCase();
+  const supportedLanguages = Object.keys(IPA_RULES);
+  if (!supportedLanguages.includes(lang)) {
+    return res.status(400).json({
+      error: `Unsupported language: ${language}. Supported: ${supportedLanguages.join(', ')}`,
+    });
+  }
+
+  const words = text.split(/\s+/).filter(Boolean);
+  const pronunciations = words.map(word => ({
+    word,
+    ipa: `/${textToIPA(word, lang)}/`,
+    language: lang,
+  }));
+
+  const fullIPA = textToIPA(text, lang);
+  console.log(`[Solfai] Pronunciation: ${words.length} words in ${lang}`);
+
+  return res.json({
+    language: lang,
+    originalText: text,
+    ipa: `/${fullIPA}/`,
+    words: pronunciations,
+  });
+});
+
+// ═══════════════════════════════════════════════════════════
+// FEATURE: Lyrics Extraction (Gemini-powered)
+// ═══════════════════════════════════════════════════════════
+
+app.post('/api/extract-lyrics', async (req, res) => {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) return res.status(500).json({ error: 'GEMINI_API_KEY not configured' });
+
+  const { imageBase64, imageMime, pdfPages, targetLanguage } = req.body;
+  const imageParts = buildImageParts(imageBase64, imageMime, pdfPages);
+  if (!imageParts.length) return res.status(400).json({ error: 'No image provided' });
+
+  try {
+    const processedParts = await Promise.all(
+      imageParts.slice(0, 3).map(async (p) => {
+        if (p.inlineData?.mimeType === 'image/jpeg') {
+          try {
+            const enhanced = await preprocessForGemini(p.inlineData.data, 'full');
+            return { inlineData: { mimeType: 'image/jpeg', data: enhanced } };
+          } catch (e) { return p; }
+        }
+        return p;
+      })
+    );
+
+    const systemPrompt = `You are an expert at reading sheet music lyrics. Extract ONLY the text/lyrics that appear below the music staves. Be precise — copy exactly what is printed, including hyphens for syllable breaks.`;
+
+    const userText = `Extract all lyrics from this sheet music. Return ONLY valid JSON:
+{
+  "lyrics": "full text of lyrics with line breaks preserved",
+  "language": "detected language",
+  "verses": [{"number": 1, "text": "verse text"}],
+  "translation": ${targetLanguage ? `"word-by-word translation to ${targetLanguage}"` : 'null'},
+  "wordByWord": ${targetLanguage ? `[{"original": "word", "translation": "translated word", "ipa": "/pronunciation/"}]` : '[]'}
+}
+
+If the lyrics are not in English${targetLanguage ? ` and target language is ${targetLanguage}` : ''}, provide word-by-word translations.`;
+
+    const raw = await callGemini(apiKey, systemPrompt,
+      [{ text: userText }, ...processedParts],
+      { temperature: 0, maxOutputTokens: 4096, thinkingBudget: 4000 }
+    );
+
+    let result;
+    try {
+      const cleaned = raw.replace(/```json?|```/gi, '').trim();
+      result = JSON.parse(cleaned);
+    } catch (e) {
+      result = { lyrics: raw, language: 'unknown', verses: [], translation: null, wordByWord: [] };
+    }
+
+    console.log(`[Solfai] Lyrics extracted: ${(result.lyrics || '').length} chars, language=${result.language}`);
+    return res.json(result);
+  } catch (err) {
+    console.error('[Solfai] Lyrics extraction error:', err.message);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════
+// FEATURE: Performance Order Resolver (repeats, D.C., D.S., coda)
+// ═══════════════════════════════════════════════════════════
+
+function resolvePerformanceOrder(measures) {
+  if (!measures || !measures.length) return [];
+
+  const order = [];
+  let i = 0;
+  let repeatStartIdx = 0;
+  let hasRepeated = new Set();
+  let dsFineActive = false;
+  let segnoIdx = null;
+  let codaIdx = null;
+  let fineIdx = null;
+  const MAX_ITERATIONS = measures.length * 4;
+  let iterations = 0;
+
+  // Pre-scan for special markers
+  for (let m = 0; m < measures.length; m++) {
+    const measure = measures[m];
+    const dir = (measure.direction || '').toLowerCase();
+    if (dir.includes('segno') || dir === 'd.s.' || dir.includes('dal segno')) {
+      if (segnoIdx === null) segnoIdx = m;
+    }
+    if (dir.includes('coda') && codaIdx === null) {
+      codaIdx = m;
+    }
+    if (dir.includes('fine')) {
+      fineIdx = m;
+    }
+  }
+
+  while (i < measures.length && iterations < MAX_ITERATIONS) {
+    iterations++;
+    const measure = measures[i];
+    order.push({
+      measureNum: measure.num || (i + 1),
+      originalIndex: i,
+    });
+
+    if (measure.repeatStart) {
+      repeatStartIdx = i;
+    }
+
+    const dir = (measure.direction || '').toLowerCase();
+
+    if (measure.repeatEnd && !hasRepeated.has(i)) {
+      hasRepeated.add(i);
+      i = repeatStartIdx;
+      continue;
+    }
+
+    if (dir.includes('d.c.') || dir.includes('da capo')) {
+      if (dir.includes('al fine') && fineIdx !== null) {
+        for (let j = 0; j <= fineIdx; j++) {
+          if (j > i) {
+            order.push({ measureNum: measures[j].num || (j + 1), originalIndex: j });
+          }
+        }
+        break;
+      }
+      if (dir.includes('al coda') && codaIdx !== null) {
+        for (let j = 0; j < codaIdx; j++) {
+          if (j > 0) {
+            order.push({ measureNum: measures[j].num || (j + 1), originalIndex: j });
+          }
+        }
+        for (let j = codaIdx; j < measures.length; j++) {
+          order.push({ measureNum: measures[j].num || (j + 1), originalIndex: j });
+        }
+        break;
+      }
+      i = 0;
+      dsFineActive = true;
+      continue;
+    }
+
+    if ((dir.includes('d.s.') || dir.includes('dal segno')) && segnoIdx !== null) {
+      if (dir.includes('al coda') && codaIdx !== null) {
+        for (let j = segnoIdx; j < codaIdx; j++) {
+          order.push({ measureNum: measures[j].num || (j + 1), originalIndex: j });
+        }
+        for (let j = codaIdx; j < measures.length; j++) {
+          order.push({ measureNum: measures[j].num || (j + 1), originalIndex: j });
+        }
+        break;
+      }
+      i = segnoIdx;
+      dsFineActive = true;
+      continue;
+    }
+
+    if (dsFineActive && dir.includes('fine')) {
+      break;
+    }
+
+    i++;
+  }
+
+  return order;
+}
+
+app.post('/api/performance-order', (req, res) => {
+  const { measures } = req.body;
+  if (!measures || !Array.isArray(measures)) {
+    return res.status(400).json({ error: 'Missing or invalid measures array' });
+  }
+
+  const order = resolvePerformanceOrder(measures);
+  const measureSequence = order.map(o => o.measureNum);
+  console.log(`[Solfai] Performance order resolved: ${order.length} measures`);
+
+  return res.json({
+    order,
+    measureSequence,
+    totalPerformedMeasures: order.length,
+    hasRepeats: order.length > measures.length,
+  });
+});
+
+// ═══════════════════════════════════════════════════════════
+// FEATURE: Export Practice Analytics as CSV
+// ═══════════════════════════════════════════════════════════
+
+app.post('/api/export-practice', (req, res) => {
+  const { userId } = req.body;
+  if (!userId) return res.status(400).json({ error: 'Missing userId' });
+
+  const filePath = join(ANALYTICS_DIR, `${userId.replace(/[^a-z0-9_-]/gi, '_')}.json`);
+  if (!existsSync(filePath)) {
+    return res.status(404).json({ error: 'No analytics data found for this user' });
+  }
+
+  try {
+    const sessions = JSON.parse(readFileSync(filePath, 'utf8'));
+    const headers = ['Date', 'Piece', 'Duration (seconds)', 'Measures Practiced', 'Accuracy'];
+    const rows = sessions.map(s => [
+      s.timestamp || '',
+      `"${(s.piece || '').replace(/"/g, '""')}"`,
+      s.duration || 0,
+      `"${(s.measuresPracticed || []).join(', ')}"`,
+      s.accuracy != null ? s.accuracy : '',
+    ].join(','));
+
+    const csv = [headers.join(','), ...rows].join('\n');
+
+    console.log(`[Solfai] Exported ${sessions.length} sessions for ${userId}`);
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="solfai-practice-${userId}.csv"`);
+    return res.send(csv);
+  } catch (err) {
+    console.error('[Solfai] Export failed:', err.message);
+    return res.status(500).json({ error: 'Failed to export analytics' });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════
+// FEATURE: Capo Calculator
+// ═══════════════════════════════════════════════════════════
+
+const CAPO_NOTE_ORDER = ['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'];
+
+function noteIndex(noteName) {
+  const normalized = noteName.replace(/\s*(major|minor)/i, '').trim();
+  const idx = CAPO_NOTE_ORDER.findIndex(n => n.toLowerCase() === normalized.toLowerCase());
+  if (idx >= 0) return idx;
+
+  for (let i = 0; i < CAPO_NOTE_ORDER.length; i++) {
+    const n = CAPO_NOTE_ORDER[i];
+    const enharm = ENHARMONIC_MAP[n];
+    if (enharm && enharm.toLowerCase() === normalized.toLowerCase()) return i;
+  }
+  return -1;
+}
+
+app.post('/api/capo', (req, res) => {
+  const { originalKey, targetKey } = req.body;
+  if (!originalKey || !targetKey) {
+    return res.status(400).json({ error: 'Missing originalKey or targetKey' });
+  }
+
+  const origRoot = originalKey.replace(/\s*(major|minor)/i, '').trim();
+  const targRoot = targetKey.replace(/\s*(major|minor)/i, '').trim();
+  const origIdx = noteIndex(origRoot);
+  const targIdx = noteIndex(targRoot);
+
+  if (origIdx < 0 || targIdx < 0) {
+    return res.status(400).json({ error: 'Invalid key names' });
+  }
+
+  const capoFret = ((targIdx - origIdx) % 12 + 12) % 12;
+
+  const allPositions = [];
+  for (let fret = 0; fret <= 12; fret++) {
+    const playedKeyIdx = ((origIdx + fret) % 12 + 12) % 12;
+    allPositions.push({
+      fret,
+      soundsAs: CAPO_NOTE_ORDER[playedKeyIdx] + (originalKey.includes('minor') ? ' minor' : ' major'),
+      matchesTarget: fret === capoFret,
+    });
+  }
+
+  console.log(`[Solfai] Capo calculator: ${originalKey} → ${targetKey} = capo ${capoFret}`);
+
+  return res.json({
+    originalKey,
+    targetKey,
+    capoFret,
+    explanation: capoFret === 0
+      ? `No capo needed — ${originalKey} and ${targetKey} are the same.`
+      : `Place capo on fret ${capoFret}. Play ${originalKey} chord shapes to sound as ${targetKey}.`,
+    allPositions,
+  });
+});
+
+// ═══════════════════════════════════════════════════════════
+// FEATURE: Historical Context (Gemini + Google Search)
+// ═══════════════════════════════════════════════════════════
+
+app.post('/api/piece-context', async (req, res) => {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) return res.status(500).json({ error: 'GEMINI_API_KEY not configured' });
+
+  const { title, composer } = req.body;
+  if (!title) return res.status(400).json({ error: 'Missing piece title' });
+
+  try {
+    const systemPrompt = `You are a musicologist and choral music expert. Use Google Search to find accurate, detailed information. Be factual and cite sources when possible.`;
+
+    const userText = `Research the choral piece "${title}"${composer ? ` by ${composer}` : ''} and return ONLY valid JSON:
+{
+  "title": "${title}",
+  "composer": {
+    "name": "full name",
+    "birth": "birth year",
+    "death": "death year or 'living'",
+    "nationality": "nationality",
+    "bio": "2-3 sentence biography focused on choral work"
+  },
+  "piece": {
+    "year": "year composed or published",
+    "occasion": "why/for whom it was written",
+    "genre": "e.g., motet, anthem, requiem movement",
+    "text_source": "source of the text/lyrics",
+    "original_language": "language of original text",
+    "duration": "approximate performance duration"
+  },
+  "performance": {
+    "tips": ["3-5 specific performance practice tips"],
+    "common_mistakes": ["2-3 common interpretation mistakes"],
+    "tempo_guidance": "historical tempo context",
+    "notable_recordings": ["1-2 recommended recordings"]
+  },
+  "historical_context": "2-3 paragraphs about the piece's place in music history"
+}`;
+
+    const raw = await callGemini(apiKey, systemPrompt,
+      [{ text: userText }],
+      {
+        temperature: 0.3,
+        maxOutputTokens: 4096,
+        thinkingBudget: 4000,
+        tools: [{ googleSearch: {} }],
+      }
+    );
+
+    let result;
+    try {
+      const cleaned = raw.replace(/```json?|```/gi, '').trim();
+      result = JSON.parse(cleaned);
+    } catch (e) {
+      result = {
+        title,
+        composer: { name: composer || 'Unknown' },
+        piece: {},
+        performance: { tips: [] },
+        historical_context: raw,
+      };
+    }
+
+    console.log(`[Solfai] Piece context retrieved: "${title}" by ${composer || 'unknown'}`);
+    return res.json(result);
+  } catch (err) {
+    console.error('[Solfai] Piece context error:', err.message);
+    return res.status(500).json({ error: err.message });
+  }
 });
 
 // ─── Start ────────────────────────────────────────────────
