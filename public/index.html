@@ -1109,10 +1109,14 @@
         <div style="display:flex;align-items:center;gap:10px;">
           <button class="btn-secondary" style="padding:7px 16px;font-size:0.78rem;" onclick="shareAnalysis()" title="Share">&#x1F517; Share</button>
           <button class="btn-secondary" style="padding:7px 16px;font-size:0.78rem;" onclick="exportAsPDF()" title="Print/PDF">&#x1F5A8; Print</button>
+          <button class="btn-secondary" style="padding:7px 16px;font-size:0.78rem;" onclick="extractLyrics()" id="extractLyricsBtn">&#x1F4DC; Extract Lyrics</button>
+          <button class="btn-secondary" style="padding:7px 16px;font-size:0.78rem;" onclick="loadHistoricalContext()" id="historicalContextBtn">&#x1F4DA; Historical Context</button>
           <div style="font-size:0.68rem;color:var(--muted);font-weight:300;">hover to edit</div>
         </div>
       </div>
       <div class="info-grid" id="infoGrid"></div>
+      <div id="lyricsExtractionResult" style="display:none;margin-bottom:24px;"></div>
+      <div id="historicalContextResult" style="display:none;margin-bottom:24px;"></div>
       <div style="margin-bottom:24px">
         <div class="results-title" style="margin-bottom:14px;font-size:1rem;">Difficulty</div>
         <div class="diff-grid" id="diffGrid"></div>
@@ -1157,6 +1161,9 @@
           <button class="btn-secondary" style="padding:7px 16px;font-size:0.78rem;" onclick="toggleSideBySide()">&#x25EB; Side-by-Side</button>
           <button class="btn-secondary" id="btnPlayFullPiece" style="padding:7px 16px;font-size:0.78rem;" onclick="playFullPiece()">&#x25B6; Play Full Piece</button>
           <button class="btn-secondary" id="btnSingAlong" style="padding:7px 16px;font-size:0.78rem;" onclick="startSingAlong()">&#x1F3A4; Sing Along</button>
+          <button class="btn-secondary" onclick="showTransposeModal()" id="transposeBtn" style="display:none;padding:7px 16px;font-size:0.78rem;">&#x1F3B9; Transpose</button>
+          <button class="btn-secondary" onclick="showPerformanceOrder()" id="performanceOrderBtn" style="display:none;padding:7px 16px;font-size:0.78rem;">&#x1F4CB; Performance Order</button>
+          <button class="btn-secondary" onclick="loadChordAnalysis()" id="chordAnalysisBtn" style="display:none;padding:7px 16px;font-size:0.78rem;">&#x1F3B6; Chord Analysis</button>
         </div>
         <div id="fullPieceProgress" style="display:none;margin-bottom:12px;">
           <div style="height:4px;background:var(--card2);border-radius:2px;overflow:hidden;">
@@ -1167,6 +1174,8 @@
         <button class="mode-btn" id="solfegeBtn" onclick="loadSolfege()">Generate Solfege for my part</button>
         <div class="mode-loading" id="solfegeLoading"><div class="mini-spinner"></div> Generating solfege...</div>
         <div class="mode-output" id="solfegeOutput" style="white-space:normal;"></div>
+        <div id="performanceOrderResult" style="display:none;margin-top:18px;"></div>
+        <div id="chordAnalysisResult" style="display:none;margin-top:18px;"></div>
         <div style="margin-top:24px;padding:22px;background:var(--card);border-radius:var(--radius-md);box-shadow:var(--shadow-card);">
           <div style="font-size:0.65rem;text-transform:uppercase;letter-spacing:3px;color:var(--gold);margin-bottom:10px;font-weight:500;">Manual Note Entry</div>
           <div style="font-size:0.82rem;color:var(--text2);margin-bottom:14px;font-weight:300;">Type notes directly for 100% accurate solfege. Use <code style="background:var(--card2);padding:2px 8px;border-radius:4px;font-size:0.8rem;">|</code> to separate measures.</div>
@@ -1196,7 +1205,11 @@
         <div class="composer-box" id="composerBox"></div>
       </div>
       <div id="tab-pronunciation" class="tab-content">
+        <div style="margin-bottom:14px;">
+          <button class="btn-secondary" style="padding:7px 16px;font-size:0.78rem;" onclick="loadIPAPronunciation()" id="ipaPronunciationBtn">&#x1F524; IPA Pronunciation Guide</button>
+        </div>
         <div id="pronunciationBox"></div>
+        <div id="ipaResultBox"></div>
       </div>
     </div>
 
@@ -1315,7 +1328,9 @@
       <div style="margin-top:14px;display:flex;gap:8px;">
         <button class="btn-secondary" onclick="playWarmupScale()">Play All</button>
         <button class="btn-secondary" onclick="playWarmupScaleDescending()">Descending</button>
+        <button class="btn-secondary" onclick="generateServerWarmups()" id="generateWarmupsBtn">&#x1F3BC; Generate Warm-ups</button>
       </div>
+      <div id="serverWarmupResults" style="margin-top:18px;"></div>
     </div>
 
     <!-- Interval Ear Training -->
@@ -1728,6 +1743,9 @@ async function handleMusicXML() {
       $('solfegeBtn').style.display = 'none';
       practiceData = data.structured.measures.map(m => ({ num: String(m.num), notes: m.notes || [], solfege: m.solfege || [], lyrics: m.lyrics || '', confidence: 'high', disagreement: false }));
       enablePracticeMode();
+      $('transposeBtn').style.display = 'inline-flex';
+      if (typeof updateChordAnalysisVisibility === 'function') updateChordAnalysisVisibility();
+      if (typeof checkPerformanceOrderVisibility === 'function') checkPerformanceOrderVisibility();
     }
     showTab('solfege', document.querySelectorAll('.tab-btn')[1]);
     analyzeBtn.disabled = false;
@@ -4167,6 +4185,482 @@ const _origShowPracticeMeasure = showPracticeMeasure;
 showPracticeMeasure = function() {
   _origShowPracticeMeasure();
   autoPageTurn();
+};
+
+// ═══════════════════════════════════════════════════════════════
+// TRANSPOSE UI
+// ═══════════════════════════════════════════════════════════════
+function showTransposeModal() {
+  if (!_solfegeStructured) {
+    showToast('Load solfege first', 'info');
+    return;
+  }
+  let overlay = $('transposeOverlay');
+  if (!overlay) {
+    document.body.insertAdjacentHTML('beforeend', `
+      <div id="transposeOverlay" style="position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:2000;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(8px);" onclick="if(event.target===this)closeTransposeModal()">
+        <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius-xl);padding:36px;max-width:380px;width:90%;box-shadow:0 24px 80px rgba(0,0,0,0.5);">
+          <div style="font-family:'Cormorant Garamond',serif;font-size:1.4rem;font-weight:700;color:var(--text);margin-bottom:8px;">Transpose</div>
+          <div style="font-size:0.82rem;color:var(--text2);margin-bottom:20px;">Select a new key to transpose all measures.</div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:24px;" id="transposeKeyGrid"></div>
+          <div style="display:flex;gap:8px;justify-content:flex-end;">
+            <button class="btn-secondary" onclick="closeTransposeModal()">Cancel</button>
+          </div>
+        </div>
+      </div>`);
+    overlay = $('transposeOverlay');
+  }
+  const keys = ['C','Db','D','Eb','E','F','F#','Gb','G','Ab','A','Bb','B'];
+  const currentKey = _solfegeStructured.tonic || _solfegeStructured.key || 'C';
+  $('transposeKeyGrid').innerHTML = keys.map(k => {
+    const isActive = k === currentKey;
+    return `<button class="part-btn${isActive ? ' active' : ''}" style="min-width:48px;padding:8px 14px;" onclick="executeTranspose('${k}')" ${isActive ? 'disabled' : ''}>${esc(k)}</button>`;
+  }).join('');
+  overlay.style.display = 'flex';
+}
+
+function closeTransposeModal() {
+  const overlay = $('transposeOverlay');
+  if (overlay) overlay.style.display = 'none';
+}
+
+async function executeTranspose(toKey) {
+  if (!_solfegeStructured) return;
+  const fromKey = _solfegeStructured.tonic || _solfegeStructured.key || 'C';
+  if (fromKey === toKey) return;
+  closeTransposeModal();
+  showToast('Transposing...', 'info');
+  try {
+    const res = await fetch('/api/transpose', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        measures: _solfegeStructured.measures,
+        fromKey: fromKey,
+        toKey: toKey
+      })
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Transpose failed');
+    }
+    const data = await res.json();
+    if (data.measures) {
+      _solfegeStructured.measures = data.measures;
+      _solfegeStructured.tonic = toKey;
+      _solfegeStructured.key = toKey;
+      $('solfegeOutput').innerHTML = renderSolfegeStructured(_solfegeStructured);
+      practiceData = _solfegeStructured.measures.map(m => ({
+        num: String(m.num), notes: m.notes || [], solfege: m.solfege || [],
+        lyrics: m.lyrics || '', confidence: m.confidence || 'medium',
+        disagreement: m.disagreement || false
+      }));
+      showToast(`Transposed from ${esc(fromKey)} to ${esc(toKey)}`, 'success');
+    }
+  } catch (err) {
+    showToast('Transpose error: ' + err.message, 'error');
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// LYRICS EXTRACTION UI
+// ═══════════════════════════════════════════════════════════════
+async function extractLyrics() {
+  if (!imageBase64 && !pdfPages.length) {
+    showToast('Upload an image first', 'info');
+    return;
+  }
+  const btn = $('extractLyricsBtn');
+  const origText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Extracting...';
+  try {
+    const res = await fetch('/api/extract-lyrics', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ imageBase64, imageMime, pdfPages })
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Lyrics extraction failed');
+    }
+    const data = await res.json();
+    const panel = $('lyricsExtractionResult');
+    let html = `<div class="info-card" style="padding:24px;">
+      <div style="font-size:0.65rem;text-transform:uppercase;letter-spacing:3px;color:var(--gold);margin-bottom:14px;font-weight:500;">Extracted Lyrics</div>`;
+    if (data.language) {
+      html += `<div style="margin-bottom:12px;"><span style="font-size:0.72rem;background:var(--gold-dim);border:1px solid rgba(212,168,83,0.2);color:var(--gold);padding:4px 12px;border-radius:100px;font-weight:500;">${esc(data.language)}</span></div>`;
+    }
+    if (data.lyrics) {
+      html += `<div style="font-size:0.92rem;color:var(--text);line-height:1.8;white-space:pre-wrap;margin-bottom:16px;">${esc(data.lyrics)}</div>`;
+    }
+    if (data.translation) {
+      html += `<div style="border-top:1px solid var(--border);padding-top:14px;margin-top:14px;">
+        <div style="font-size:0.65rem;text-transform:uppercase;letter-spacing:3px;color:var(--violet);margin-bottom:10px;font-weight:500;">Translation</div>
+        <div style="font-size:0.88rem;color:var(--text2);line-height:1.8;white-space:pre-wrap;">${esc(data.translation)}</div>
+      </div>`;
+    }
+    if (data.wordByWord && data.wordByWord.length) {
+      html += `<div style="border-top:1px solid var(--border);padding-top:14px;margin-top:14px;">
+        <div style="font-size:0.65rem;text-transform:uppercase;letter-spacing:3px;color:var(--violet);margin-bottom:10px;font-weight:500;">Word-by-Word</div>
+        <div style="display:flex;flex-wrap:wrap;gap:10px;">`;
+      for (const w of data.wordByWord) {
+        html += `<div style="background:var(--card2);border-radius:var(--radius-sm);padding:8px 12px;text-align:center;">
+          <div style="font-size:0.88rem;color:var(--text);font-weight:500;">${esc(w.word || '')}</div>
+          <div style="font-size:0.75rem;color:var(--text2);">${esc(w.meaning || '')}</div>
+        </div>`;
+      }
+      html += `</div></div>`;
+    }
+    html += `</div>`;
+    panel.innerHTML = html;
+    panel.style.display = 'block';
+    showToast('Lyrics extracted', 'success');
+  } catch (err) {
+    showToast('Lyrics error: ' + err.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = origText;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// HISTORICAL CONTEXT UI
+// ═══════════════════════════════════════════════════════════════
+async function loadHistoricalContext() {
+  if (!currentAnalysis) {
+    showToast('Analyze a piece first', 'info');
+    return;
+  }
+  const btn = $('historicalContextBtn');
+  const origText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Loading...';
+  try {
+    const res = await fetch('/api/piece-context', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        pieceTitle: currentAnalysis.pieceTitle || '',
+        composerName: currentAnalysis.composerName || ''
+      })
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Context loading failed');
+    }
+    const data = await res.json();
+    const panel = $('historicalContextResult');
+    let html = `<div class="info-card" style="padding:28px;">
+      <div style="font-size:0.65rem;text-transform:uppercase;letter-spacing:3px;color:var(--gold);margin-bottom:18px;font-weight:500;">Historical Context</div>`;
+    if (data.history) {
+      html += `<div style="margin-bottom:20px;">
+        <div style="font-family:'Cormorant Garamond',serif;font-size:1.1rem;font-weight:600;color:var(--text);margin-bottom:8px;">History</div>
+        <div style="font-size:0.88rem;color:var(--text2);line-height:1.8;">${esc(data.history)}</div>
+      </div>`;
+    }
+    if (data.composerInfo) {
+      html += `<div style="margin-bottom:20px;border-top:1px solid var(--border);padding-top:16px;">
+        <div style="font-family:'Cormorant Garamond',serif;font-size:1.1rem;font-weight:600;color:var(--text);margin-bottom:8px;">About the Composer</div>
+        <div style="font-size:0.88rem;color:var(--text2);line-height:1.8;">${esc(data.composerInfo)}</div>
+      </div>`;
+    }
+    if (data.performanceTips && data.performanceTips.length) {
+      html += `<div style="border-top:1px solid var(--border);padding-top:16px;">
+        <div style="font-family:'Cormorant Garamond',serif;font-size:1.1rem;font-weight:600;color:var(--text);margin-bottom:12px;">Performance Tips</div>`;
+      for (let i = 0; i < data.performanceTips.length; i++) {
+        html += `<div style="display:flex;gap:12px;align-items:flex-start;margin-bottom:10px;">
+          <div style="min-width:24px;height:24px;border-radius:50%;background:var(--gold-dim);color:var(--gold);display:flex;align-items:center;justify-content:center;font-size:0.72rem;font-weight:600;">${i + 1}</div>
+          <div style="font-size:0.85rem;color:var(--text2);line-height:1.7;">${esc(data.performanceTips[i])}</div>
+        </div>`;
+      }
+      html += `</div>`;
+    }
+    html += `</div>`;
+    panel.innerHTML = html;
+    panel.style.display = 'block';
+    panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    showToast('Historical context loaded', 'success');
+  } catch (err) {
+    showToast('Context error: ' + err.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = origText;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PERFORMANCE ORDER UI
+// ═══════════════════════════════════════════════════════════════
+function checkPerformanceOrderVisibility() {
+  if (!_solfegeStructured || !_solfegeStructured.measures) return;
+  const hasRepeats = _solfegeStructured.measures.some(m =>
+    m.repeatStart || m.repeatEnd || m.direction
+  );
+  $('performanceOrderBtn').style.display = hasRepeats ? 'inline-flex' : 'none';
+}
+
+async function showPerformanceOrder() {
+  if (!_solfegeStructured) {
+    showToast('Load solfege first', 'info');
+    return;
+  }
+  const btn = $('performanceOrderBtn');
+  const origText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Loading...';
+  try {
+    const res = await fetch('/api/performance-order', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ measures: _solfegeStructured.measures })
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Performance order failed');
+    }
+    const data = await res.json();
+    const panel = $('performanceOrderResult');
+    let html = `<div class="info-card" style="padding:24px;">
+      <div style="font-size:0.65rem;text-transform:uppercase;letter-spacing:3px;color:var(--gold);margin-bottom:14px;font-weight:500;">Performance Order</div>
+      <div style="font-size:0.82rem;color:var(--text2);margin-bottom:16px;">The order in which measures should be performed, accounting for repeats and navigation marks.</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;">`;
+    if (data.order && data.order.length) {
+      for (let i = 0; i < data.order.length; i++) {
+        const m = data.order[i];
+        const num = typeof m === 'object' ? (m.measure || m.num || m) : m;
+        html += `<div style="background:var(--card2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 12px;font-size:0.82rem;color:var(--text);font-weight:500;cursor:pointer;" onclick="scrollToMeasure(${num})" title="Go to measure ${num}">m.${num}</div>`;
+      }
+    }
+    html += `</div></div>`;
+    panel.innerHTML = html;
+    panel.style.display = 'block';
+    showToast('Performance order resolved', 'success');
+  } catch (err) {
+    showToast('Performance order error: ' + err.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = origText;
+  }
+}
+
+function scrollToMeasure(num) {
+  const cards = $('solfegeOutput')?.querySelectorAll('[data-measure]');
+  if (!cards) return;
+  for (const card of cards) {
+    if (card.getAttribute('data-measure') === String(num)) {
+      card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      card.style.outline = '2px solid var(--gold)';
+      setTimeout(() => { card.style.outline = ''; }, 2000);
+      return;
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// IPA PRONUNCIATION UI
+// ═══════════════════════════════════════════════════════════════
+async function loadIPAPronunciation() {
+  if (!currentAnalysis) {
+    showToast('Analyze a piece first', 'info');
+    return;
+  }
+  const pron = currentAnalysis.pronunciation;
+  if (!pron || !pron.needsGuide || !pron.words || !pron.words.length) {
+    showToast('No non-English lyrics detected for IPA guide', 'info');
+    return;
+  }
+  const lyricsText = pron.words.map(w => w.word).join(' ');
+  const language = pron.language || 'Unknown';
+  const btn = $('ipaPronunciationBtn');
+  const origText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Generating IPA...';
+  try {
+    const res = await fetch('/api/pronunciation', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: lyricsText, language: language })
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'IPA generation failed');
+    }
+    const data = await res.json();
+    const panel = $('ipaResultBox');
+    let html = `<div class="info-card" style="padding:24px;margin-top:18px;">
+      <div style="font-size:0.65rem;text-transform:uppercase;letter-spacing:3px;color:var(--gold);margin-bottom:14px;font-weight:500;">IPA Pronunciation Guide</div>`;
+    if (data.language) {
+      html += `<div style="margin-bottom:14px;"><span style="font-size:0.72rem;background:var(--violet-dim);border:1px solid rgba(139,127,212,0.2);color:var(--violet);padding:4px 12px;border-radius:100px;font-weight:500;">${esc(data.language)}</span></div>`;
+    }
+    if (data.guide && data.guide.length) {
+      html += `<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:0.85rem;">
+        <thead><tr>
+          <th style="text-align:left;padding:10px 14px;border-bottom:2px solid var(--border);color:var(--gold);font-size:0.7rem;text-transform:uppercase;letter-spacing:2px;">Word</th>
+          <th style="text-align:left;padding:10px 14px;border-bottom:2px solid var(--border);color:var(--gold);font-size:0.7rem;text-transform:uppercase;letter-spacing:2px;">IPA</th>
+          <th style="text-align:left;padding:10px 14px;border-bottom:2px solid var(--border);color:var(--gold);font-size:0.7rem;text-transform:uppercase;letter-spacing:2px;">Approximation</th>
+        </tr></thead><tbody>`;
+      for (const entry of data.guide) {
+        html += `<tr>
+          <td style="padding:8px 14px;border-bottom:1px solid var(--border);color:var(--text);font-weight:500;">${esc(entry.word || '')}</td>
+          <td style="padding:8px 14px;border-bottom:1px solid var(--border);color:var(--violet);font-family:monospace;">${esc(entry.ipa || '')}</td>
+          <td style="padding:8px 14px;border-bottom:1px solid var(--border);color:var(--text2);">${esc(entry.approx || entry.approximation || '')}</td>
+        </tr>`;
+      }
+      html += `</tbody></table></div>`;
+    } else if (data.ipa) {
+      html += `<div style="font-family:monospace;font-size:1rem;color:var(--violet);line-height:2;white-space:pre-wrap;">${esc(data.ipa)}</div>`;
+    }
+    html += `</div>`;
+    panel.innerHTML = html;
+    showToast('IPA guide generated', 'success');
+  } catch (err) {
+    showToast('IPA error: ' + err.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = origText;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// CHORD ANALYSIS UI
+// ═══════════════════════════════════════════════════════════════
+function updateChordAnalysisVisibility() {
+  const btn = $('chordAnalysisBtn');
+  if (!btn) return;
+  btn.style.display = _solfegeStructured ? 'inline-flex' : 'none';
+}
+
+async function loadChordAnalysis() {
+  if (!_solfegeStructured) {
+    showToast('Load solfege first', 'info');
+    return;
+  }
+  const btn = $('chordAnalysisBtn');
+  const origText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Analyzing...';
+  try {
+    const res = await fetch('/api/chord-analysis', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ measures: _solfegeStructured.measures })
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Chord analysis failed');
+    }
+    const data = await res.json();
+    const panel = $('chordAnalysisResult');
+    let html = `<div class="info-card" style="padding:24px;">
+      <div style="font-size:0.65rem;text-transform:uppercase;letter-spacing:3px;color:var(--gold);margin-bottom:14px;font-weight:500;">Chord Analysis</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px;">`;
+    if (data.chords && data.chords.length) {
+      for (const c of data.chords) {
+        const num = c.measure || c.num || '';
+        const chord = c.chord || c.name || '';
+        const roman = c.roman || c.numeral || '';
+        html += `<div style="background:var(--card2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;text-align:center;">
+          <div style="font-size:0.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">m.${num}</div>
+          <div style="font-size:1rem;font-weight:600;color:var(--text);">${esc(chord)}</div>
+          ${roman ? `<div style="font-size:0.78rem;color:var(--violet);margin-top:2px;">${esc(roman)}</div>` : ''}
+        </div>`;
+      }
+    }
+    html += `</div></div>`;
+    panel.innerHTML = html;
+    panel.style.display = 'block';
+    showToast('Chord analysis complete', 'success');
+  } catch (err) {
+    showToast('Chord analysis error: ' + err.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = origText;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// WARM-UP EXERCISES UI
+// ═══════════════════════════════════════════════════════════════
+async function generateServerWarmups() {
+  const key = _solfegeStructured?.tonic || _solfegeStructured?.key ||
+    (currentAnalysis?.keySignature || '').split(' ')[0] || 'C';
+  const voicePart = selectedPart || 'Soprano';
+  const btn = $('generateWarmupsBtn');
+  const origText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Generating...';
+  try {
+    const res = await fetch('/api/warmup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: key, voicePart: voicePart })
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Warm-up generation failed');
+    }
+    const data = await res.json();
+    const panel = $('serverWarmupResults');
+    let html = '';
+    if (data.exercises && data.exercises.length) {
+      for (const ex of data.exercises) {
+        html += `<div class="info-card" style="padding:20px;margin-bottom:12px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+            <div style="font-size:0.88rem;font-weight:600;color:var(--text);">${esc(ex.name || ex.title || 'Exercise')}</div>
+            ${ex.notes && ex.notes.length ? `<button class="btn-secondary" style="padding:5px 12px;font-size:0.72rem;" onclick="playWarmupExercise(${JSON.stringify(ex.notes).replace(/"/g, '&quot;')})">Play</button>` : ''}
+          </div>`;
+        if (ex.description) {
+          html += `<div style="font-size:0.82rem;color:var(--text2);margin-bottom:10px;line-height:1.6;">${esc(ex.description)}</div>`;
+        }
+        if (ex.notes && ex.notes.length) {
+          html += `<div style="display:flex;flex-wrap:wrap;gap:6px;">`;
+          for (const note of ex.notes) {
+            const noteName = typeof note === 'object' ? (note.name || note.note || '') : note;
+            const freq = typeof note === 'object' ? note.frequency : null;
+            html += `<div style="background:var(--card2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 12px;font-size:0.82rem;color:var(--text);cursor:${freq ? 'pointer' : 'default'};"${freq ? ` onclick="playPiano(${freq}, 1.0)"` : ''}>${esc(String(noteName))}</div>`;
+          }
+          html += `</div>`;
+        }
+        if (ex.solfege) {
+          html += `<div style="margin-top:8px;font-size:0.78rem;color:var(--gold);">${esc(ex.solfege)}</div>`;
+        }
+        html += `</div>`;
+      }
+    }
+    panel.innerHTML = html;
+    showToast('Warm-up exercises generated', 'success');
+  } catch (err) {
+    showToast('Warm-up error: ' + err.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = origText;
+  }
+}
+
+function playWarmupExercise(notes) {
+  if (!notes || !notes.length) return;
+  let delay = 0;
+  for (const note of notes) {
+    const freq = typeof note === 'object' ? note.frequency : null;
+    if (freq) {
+      setTimeout(() => playPiano(freq, 0.8), delay);
+      delay += 600;
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// HOOKS: Show/hide new buttons when solfege loads
+// ═══════════════════════════════════════════════════════════════
+const _origLoadSolfege = loadSolfege;
+loadSolfege = async function() {
+  await _origLoadSolfege();
+  if (_solfegeStructured) {
+    $('transposeBtn').style.display = 'inline-flex';
+    updateChordAnalysisVisibility();
+    checkPerformanceOrderVisibility();
+  }
 };
 
 </script>
