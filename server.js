@@ -193,6 +193,28 @@ const PITCH_SCHEMA = {
   required: ["pitch", "line_or_space", "which_line_or_space"]
 };
 
+// Dedicated last note schema for cross-validation
+const LAST_NOTE_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    pitch: {
+      type: "STRING",
+      description: "The very last sung note with octave number.",
+      enum: [
+        "C3", "C#3", "D3", "Eb3", "E3", "F3", "F#3", "G3", "Ab3", "A3", "Bb3", "B3",
+        "C4", "C#4", "D4", "Eb4", "E4", "F4", "F#4", "G4", "Ab4", "A4", "Bb4", "B4",
+        "C5", "C#5", "D5", "Eb5", "E5", "F5", "F#5", "G5", "Ab5", "A5", "Bb5", "B5",
+        "C6", "D6", "E6", "F6", "G6"
+      ]
+    },
+    confidence: {
+      type: "STRING",
+      enum: ["certain", "likely", "uncertain"]
+    }
+  },
+  required: ["pitch"]
+};
+
 // ─── Key from flat/sharp count (CODE, not AI) ─────────────
 const KEY_FROM_COUNT = {
   '0': { major: 'C major', minor: 'A minor' },
@@ -953,6 +975,39 @@ async function preprocessForGemini(base64Data, mode = 'full') {
         .sharpen({ sigma: 3.0 })
         .threshold(150)
         .jpeg({ quality: 97 });
+    } else if (mode === 'annotated') {
+      // Red semi-transparent rectangle overlay on key signature area (top-left 35% x 22%)
+      const meta = await sharp(buf).metadata();
+      const overlayWidth = Math.floor(meta.width * 0.35);
+      const overlayHeight = Math.floor(meta.height * 0.22);
+      const overlaySvg = Buffer.from(
+        `<svg width="${overlayWidth}" height="${overlayHeight}">
+          <rect x="0" y="0" width="${overlayWidth}" height="${overlayHeight}"
+                fill="red" fill-opacity="0.25" stroke="red" stroke-width="4" stroke-opacity="0.8"/>
+        </svg>`
+      );
+      pipeline = sharp(buf)
+        .composite([{
+          input: overlaySvg,
+          top: 0,
+          left: 0,
+        }])
+        .sharpen({ sigma: 1.5 })
+        .jpeg({ quality: 95 });
+    } else if (mode === 'first_2_measures') {
+      // Crop left 50% width x top 30% height, resize to 2000px wide for 2x zoom
+      const meta = await sharp(buf).metadata();
+      pipeline = sharp(buf)
+        .extract({
+          left: 0, top: 0,
+          width: Math.floor(meta.width * 0.5),
+          height: Math.floor(meta.height * 0.3)
+        })
+        .resize({ width: 2000 })
+        .grayscale()
+        .normalise()
+        .sharpen({ sigma: 2.5 })
+        .jpeg({ quality: 97 });
     } else {
       pipeline = sharp(buf)
         .grayscale()
@@ -1193,11 +1248,16 @@ async function handleAnalyze(res, apiKey, imageParts, part, rawBase64, pdfPages)
   let keyRegionParts = [];
   let firstSystemParts = [];
 
+  let annotatedKeyParts = [];
+  let first2MeasuresParts = [];
+
   if (firstJpeg) {
-    const [keyData, firstSysData, hiContrast] = await Promise.all([
+    const [keyData, firstSysData, hiContrast, annotatedData, first2MData] = await Promise.all([
       preprocessForGemini(firstJpeg.inlineData.data, 'key_region').catch(() => null),
       preprocessForGemini(firstJpeg.inlineData.data, 'first_system').catch(() => null),
       preprocessForGemini(firstJpeg.inlineData.data, 'high_contrast').catch(() => null),
+      preprocessForGemini(firstJpeg.inlineData.data, 'annotated').catch(() => null),
+      preprocessForGemini(firstJpeg.inlineData.data, 'first_2_measures').catch(() => null),
     ]);
     if (keyData) keyRegionParts = [{ inlineData: { mimeType: 'image/jpeg', data: keyData } }];
     if (firstSysData) firstSystemParts = [{ inlineData: { mimeType: 'image/jpeg', data: firstSysData } }];
@@ -1205,6 +1265,8 @@ async function handleAnalyze(res, apiKey, imageParts, part, rawBase64, pdfPages)
       // Add high-contrast version to processed parts for Flash reads
       processedParts.push({ inlineData: { mimeType: 'image/jpeg', data: hiContrast } });
     }
+    if (annotatedData) annotatedKeyParts = [{ inlineData: { mimeType: 'image/jpeg', data: annotatedData } }];
+    if (first2MData) first2MeasuresParts = [{ inlineData: { mimeType: 'image/jpeg', data: first2MData } }];
   }
 
   // ═══ PHASE 1: Dedicated key signature extraction (3 reads) ═══
@@ -1296,6 +1358,12 @@ For SATB: Soprano=top treble staff stems up, Alto=bottom treble stems down, Teno
       [{ text: 'Count the flats and sharps in the key signature.' }, ...processedParts.slice(0, 1)],
       { model: GEMINI_FLASH, temperature: 0, maxOutputTokens: 128, responseSchema: KEY_SIG_SCHEMA, thinkingBudget: 0 }
     ),
+    // KEY SIG read 4: annotated image with red box highlighting key sig area
+    callGemini(apiKey, keySigPrompt,
+      [{ text: 'The key signature area is highlighted with a red box. Count the accidentals inside the red highlighted region.' },
+       ...(annotatedKeyParts.length ? annotatedKeyParts : keyRegionParts.length ? keyRegionParts : processedParts.slice(0, 1))],
+      { temperature: 0, maxOutputTokens: 128, responseSchema: KEY_SIG_SCHEMA, thinkingBudget: 4000 }
+    ),
 
     // FULL EXTRACTION: 3 reads (2 Pro + 1 Flash) for self-consistency
     callGemini(apiKey, fullExtractPrompt,
@@ -1324,18 +1392,25 @@ For SATB: Soprano=top treble staff stems up, Alto=bottom treble stems down, Teno
       [{ text: `Find the starting pitch for ${part}.` }, ...processedParts.slice(0, 1)],
       { model: GEMINI_FLASH, temperature: 0, maxOutputTokens: 256, responseSchema: PITCH_SCHEMA, thinkingBudget: 0 }
     ),
+    // PITCH read 4: 2x zoom crop of first 2 measures for additional accuracy
+    callGemini(apiKey, pitchPrompt,
+      [{ text: `This is a zoomed-in crop of the first 2 measures. Find the first sung note for ${part}.` },
+       ...(first2MeasuresParts.length ? first2MeasuresParts : firstSystemParts.length ? firstSystemParts : processedParts.slice(0, 1))],
+      { temperature: 0, maxOutputTokens: 256, responseSchema: PITCH_SCHEMA, thinkingBudget: 6000 }
+    ),
   ];
 
   const results = await Promise.all(allPromises);
 
-  // Parse key signature votes
+  // Parse key signature votes (indices 0-3: 2 Pro + 1 Flash + 1 annotated Pro)
   const keyVotes = [];
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < 4; i++) {
     try {
       const ks = JSON.parse(results[i]);
       const flatCount = Number(ks.flat_count) || 0;
       const sharpCount = Number(ks.sharp_count) || 0;
-      const weight = i < 2 ? WEIGHT_PRO : WEIGHT_FLASH;
+      // 0,1 = Pro, 2 = Flash, 3 = Pro (annotated)
+      const weight = i === 2 ? WEIGHT_FLASH : WEIGHT_PRO;
       keyVotes.push({ flatCount, sharpCount, weight, confidence: ks.confidence });
     } catch (e) {
       console.warn(`[Solfai] Key sig read ${i + 1} parse failed`);
@@ -1350,26 +1425,27 @@ For SATB: Soprano=top treble staff stems up, Alto=bottom treble stems down, Teno
 
   console.log(`[Solfai] Key votes: ${keyVotes.map(v => `${v.flatCount}b/${v.sharpCount}s`).join(', ')} → ${votedFlats}b/${votedSharps}s`);
 
-  // Parse full extraction results
+  // Parse full extraction results (indices 4-6)
   const fullExtractions = [];
-  for (let i = 3; i < 6; i++) {
+  for (let i = 4; i < 7; i++) {
     try {
       fullExtractions.push(JSON.parse(results[i]));
     } catch (e) {
-      console.warn(`[Solfai] Full extraction ${i - 2} parse failed`);
+      console.warn(`[Solfai] Full extraction ${i - 3} parse failed`);
       fullExtractions.push({});
     }
   }
 
-  // Parse starting pitch votes
+  // Parse starting pitch votes (indices 7-10: 2 Pro + 1 Flash + 1 zoomed Pro)
   const pitchVotes = [];
-  for (let i = 6; i < 9; i++) {
+  for (let i = 7; i < 11; i++) {
     try {
       const pd = JSON.parse(results[i]);
-      const weight = i < 8 ? WEIGHT_PRO : WEIGHT_FLASH;
+      // 7,8 = Pro, 9 = Flash, 10 = Pro (zoomed)
+      const weight = i === 9 ? WEIGHT_FLASH : WEIGHT_PRO;
       pitchVotes.push({ value: pd.pitch, weight, lineOrSpace: pd.line_or_space, whichNum: pd.which_line_or_space });
     } catch (e) {
-      console.warn(`[Solfai] Pitch read ${i - 5} parse failed`);
+      console.warn(`[Solfai] Pitch read ${i - 6} parse failed`);
     }
   }
 
@@ -1470,8 +1546,38 @@ For SATB: Soprano=top treble staff stems up, Alto=bottom treble stems down, Teno
 
   // ═══ CROSS-VALIDATE starting pitch scale degree ═══
   const startDegree = noteToScaleDegree(finalPitch.replace(/\d+$/, ''), tonic);
+  let startDegreeWarning = null;
   if (startDegree !== null && ![1, 3, 5].includes(startDegree)) {
-    console.warn(`[Solfai] Warning: starting pitch ${finalPitch} is scale degree ${startDegree} in ${tonic} — not Do(1), Mi(3), or Sol(5). Verify manually.`);
+    startDegreeWarning = `Starting pitch ${finalPitch} is scale degree ${startDegree} in ${tonic} — not Do(1), Mi(3), or Sol(5). Verify manually.`;
+    console.warn(`[Solfai] Warning: ${startDegreeWarning}`);
+  }
+
+  // ═══ CROSS-VALIDATE last note (should also be Do or Sol) ═══
+  let lastNoteWarning = null;
+  let lastNotePitch = null;
+  try {
+    const lastNotePrompt = `You are a music reading specialist. Find the VERY LAST SUNG NOTE in the ${part} vocal part.
+Look at the final measure of the piece. The last note is the one just before the final barline (double barline).
+For SATB: Soprano=top treble stems up, Alto=bottom treble stems down, Tenor=treble-8/bass stems up, Bass=bottom bass stems down.
+TREBLE CLEF: Lines E4 G4 B4 D5 F5. Spaces F4 A4 C5 E5.
+BASS CLEF: Lines G2 B2 D3 F3 A3. Spaces A2 C3 E3 G3.`;
+    const lastNoteRaw = await callGemini(apiKey, lastNotePrompt,
+      [{ text: `Find the last sung note for ${part}.` }, ...processedParts.slice(0, 2)],
+      { temperature: 0, maxOutputTokens: 128, responseSchema: LAST_NOTE_SCHEMA, thinkingBudget: 4000 }
+    );
+    const lastNoteData = JSON.parse(lastNoteRaw);
+    lastNotePitch = lastNoteData.pitch;
+    if (lastNotePitch) {
+      const lastDegree = noteToScaleDegree(lastNotePitch.replace(/\d+$/, ''), tonic);
+      if (lastDegree !== null && ![1, 5].includes(lastDegree)) {
+        lastNoteWarning = `Last note ${lastNotePitch} is scale degree ${lastDegree} in ${tonic} — expected Do(1) or Sol(5). Verify ending.`;
+        console.warn(`[Solfai] Warning: ${lastNoteWarning}`);
+      } else {
+        console.log(`[Solfai] Last note ${lastNotePitch} is scale degree ${lastDegree} in ${tonic} — valid ending.`);
+      }
+    }
+  } catch (e) {
+    console.warn('[Solfai] Last note cross-validation failed:', e.message);
   }
 
   // Consensus on other fields
@@ -1593,6 +1699,12 @@ Output ONLY valid JSON.`;
       totalPitchReads: pitchVotes.length,
     },
     _dbMatch: dbMatch ? { title: dbMatch.title, composer: dbMatch.composer, overrideApplied: dbOverrideApplied } : null,
+    _crossValidation: {
+      startDegree,
+      startDegreeWarning,
+      lastNotePitch,
+      lastNoteWarning,
+    },
   };
 
   return res.status(200).json({ structured, text: buildTextSummary(structured, part) });
@@ -1733,6 +1845,7 @@ Rules:
 - Note any repeat signs: set "repeatStart": true if measure begins with ||: and "repeatEnd": true if measure ends with :||
 - If D.C., D.S., or coda symbols appear, include "direction": "D.C." / "D.S." / "coda" on that measure
 - If the key signature changes mid-piece, set "keyChange": "new key name" on the measure where it changes
+- If the clef changes mid-piece (e.g., treble to bass or vice versa), add "clefChange": "bass" or "clefChange": "treble" on that measure. Re-read all subsequent notes using the new clef reference.
 - Include accidentals: Bb4, F#4, Eb5
 - Key signature accidentals apply to ALL notes of that pitch class unless cancelled by natural
 - Use [?] for unreadable notes
@@ -1866,6 +1979,47 @@ ${outputFormat}`;
     m.valid = m.solfege.every(s => VALID_SOLFEGE.has(s));
   }
 
+  // Step 7: Duration validation — flag measures with implausible note counts
+  // Extract time signature from the first measure's context or infer from note counts
+  const timeSigFromMeasures = reconciledMeasures.find(m => m.timeSig)?.timeSig || null;
+  const beatsPerMeasure = timeSigFromMeasures ? getBeatsPerMeasure(timeSigFromMeasures) : null;
+  let durationWarnings = 0;
+  if (beatsPerMeasure) {
+    // Max plausible notes per measure: beats * 4 (allowing sixteenth notes)
+    // Min plausible notes (non-pickup): 1
+    const maxNotesPlausible = Math.ceil(beatsPerMeasure * 4);
+    for (const m of reconciledMeasures) {
+      const noteCount = (m.notes || []).filter(n => n !== '[?]').length;
+      if (noteCount > maxNotesPlausible && !m.pickup) {
+        m.durationWarning = `Too many notes (${noteCount}) for ${timeSigFromMeasures} (max ~${maxNotesPlausible})`;
+        durationWarnings++;
+      } else if (noteCount === 0 && !m.pickup) {
+        m.durationWarning = 'Empty measure — possible extraction error';
+        durationWarnings++;
+      }
+    }
+  } else {
+    // No time sig available: use median note count to flag outliers
+    const noteCounts = reconciledMeasures
+      .filter(m => !m.pickup && (m.notes || []).length > 0)
+      .map(m => (m.notes || []).length);
+    if (noteCounts.length >= 3) {
+      const sorted = [...noteCounts].sort((a, b) => a - b);
+      const median = sorted[Math.floor(sorted.length / 2)];
+      const threshold = Math.max(median * 3, 12);
+      for (const m of reconciledMeasures) {
+        const noteCount = (m.notes || []).filter(n => n !== '[?]').length;
+        if (noteCount > threshold && !m.pickup) {
+          m.durationWarning = `Unusually many notes (${noteCount}) — median is ${median}. Possible extraction error.`;
+          durationWarnings++;
+        }
+      }
+    }
+  }
+  if (durationWarnings > 0) {
+    console.log(`[Solfai] Duration validation: ${durationWarnings} measures flagged`);
+  }
+
   const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
   const highConfCount = reconciledMeasures.filter(m => m.confidence === 'high').length;
   console.log(`[Solfai] Solfege complete: ${reconciledMeasures.length} measures (${highConfCount} high-conf) in ${elapsed}s`);
@@ -1878,6 +2032,7 @@ ${outputFormat}`;
     textOutput += `  Solfege: ${(m.solfege || []).join(' ')}\n`;
     textOutput += `  Lyrics:  "${m.lyrics || ''}"\n`;
     if (m.confidence !== 'high') textOutput += `  ⚠ Confidence: ${m.confidence}\n`;
+    if (m.durationWarning) textOutput += `  ⚠ Duration: ${m.durationWarning}\n`;
     textOutput += '\n';
   }
 
@@ -1895,6 +2050,7 @@ ${outputFormat}`;
       measures: reconciledMeasures,
       disagreements: reconciledMeasures.filter(m => m.disagreement).length,
       theoryCorrections,
+      durationWarnings,
       extractionCount: measureSets.length,
       highConfidenceCount: highConfCount,
     },
@@ -3392,6 +3548,63 @@ app.post('/api/piece-context', async (req, res) => {
     console.error('[Solfai] Piece context error:', err.message);
     return res.status(500).json({ error: err.message });
   }
+});
+
+// ─── Service Worker for PWA offline support ──────────────
+app.get('/sw.js', (req, res) => {
+  res.setHeader('Content-Type', 'application/javascript');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.send(`
+const CACHE_NAME = 'solfai-cache-v1';
+const STATIC_ASSETS = [
+  '/',
+  '/index.html',
+  '/style.css',
+  '/app.js',
+  '/manifest.json',
+];
+
+self.addEventListener('install', (event) => {
+  event.waitUntil(
+    caches.open(CACHE_NAME).then((cache) => {
+      return cache.addAll(STATIC_ASSETS).catch((err) => {
+        console.warn('[SW] Failed to cache some assets:', err);
+      });
+    })
+  );
+  self.skipWaiting();
+});
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    caches.keys().then((keys) => {
+      return Promise.all(
+        keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))
+      );
+    })
+  );
+  self.clients.claim();
+});
+
+self.addEventListener('fetch', (event) => {
+  const url = new URL(event.request.url);
+  if (url.pathname.startsWith('/api/')) {
+    return;
+  }
+  event.respondWith(
+    caches.match(event.request).then((cached) => {
+      const fetchPromise = fetch(event.request).then((response) => {
+        if (response.ok) {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+        }
+        return response;
+      }).catch(() => cached);
+      return cached || fetchPromise;
+    })
+  );
+});
+  `.trim());
 });
 
 // ─── Start ────────────────────────────────────────────────

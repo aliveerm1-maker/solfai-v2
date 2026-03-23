@@ -762,6 +762,11 @@
       .results-header { border-bottom: 2px solid #333; padding-bottom: 8px; }
       .print-header { display: block !important; text-align: center; margin-bottom: 20px; font-family: 'Cormorant Garamond', serif; font-size: 1.6rem; font-weight: 700; }
       .side-by-side-container { flex-direction: column !important; }
+      .bottom-nav, .toast-container, .btn-secondary, button:not(.print-keep), .mode-btn { display: none !important; }
+      .section { display: block !important; padding: 0 !important; }
+      .section.active { display: block !important; }
+      body { background: white !important; color: black !important; }
+      .solfege-table { border: 1px solid #ccc !important; break-inside: avoid; }
     }
     .print-header { display: none; }
 
@@ -1148,8 +1153,16 @@
           <button class="part-btn" id="fixedDoBtn" onclick="setSolfegeSystem('fixed')">Fixed Do</button>
           <button class="part-btn" id="degreesBtn" onclick="setSolfegeSystem('degrees')">Scale Degrees</button>
         </div>
-        <div style="display:flex;gap:8px;margin-bottom:12px;">
+        <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
           <button class="btn-secondary" style="padding:7px 16px;font-size:0.78rem;" onclick="toggleSideBySide()">&#x25EB; Side-by-Side</button>
+          <button class="btn-secondary" id="btnPlayFullPiece" style="padding:7px 16px;font-size:0.78rem;" onclick="playFullPiece()">&#x25B6; Play Full Piece</button>
+          <button class="btn-secondary" id="btnSingAlong" style="padding:7px 16px;font-size:0.78rem;" onclick="startSingAlong()">&#x1F3A4; Sing Along</button>
+        </div>
+        <div id="fullPieceProgress" style="display:none;margin-bottom:12px;">
+          <div style="height:4px;background:var(--card2);border-radius:2px;overflow:hidden;">
+            <div id="fullPieceProgressFill" style="height:100%;width:0%;background:linear-gradient(90deg,var(--gold),var(--gold-light));transition:width 0.2s;border-radius:2px;"></div>
+          </div>
+          <div id="fullPieceProgressText" style="font-size:0.7rem;color:var(--muted);margin-top:4px;"></div>
         </div>
         <button class="mode-btn" id="solfegeBtn" onclick="loadSolfege()">Generate Solfege for my part</button>
         <div class="mode-loading" id="solfegeLoading"><div class="mini-spinner"></div> Generating solfege...</div>
@@ -1897,15 +1910,20 @@ function playPiano(frequency, duration = 2.5, btn = null) {
     nodes.push(osc);
   });
 
-  const noiseBuf = ctx.createBuffer(1, ctx.sampleRate * 0.02, ctx.sampleRate);
+  const noiseBuf = ctx.createBuffer(1, ctx.sampleRate * 0.03, ctx.sampleRate);
   const noiseData = noiseBuf.getChannelData(0);
   for (let i = 0; i < noiseData.length; i++) noiseData[i] = (Math.random() * 2 - 1) * 0.3;
   const noiseSrc = ctx.createBufferSource();
   noiseSrc.buffer = noiseBuf;
+  const noiseBand = ctx.createBiquadFilter();
+  noiseBand.type = 'bandpass';
+  noiseBand.frequency.value = frequency;
+  noiseBand.Q.value = 2;
   const noiseGain = ctx.createGain();
-  noiseGain.gain.setValueAtTime(0.15, ctx.currentTime);
-  noiseGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.05);
-  noiseSrc.connect(noiseGain);
+  noiseGain.gain.setValueAtTime(0.18, ctx.currentTime);
+  noiseGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.04);
+  noiseSrc.connect(noiseBand);
+  noiseBand.connect(noiseGain);
   noiseGain.connect(master);
   noiseSrc.start(ctx.currentTime);
   nodes.push(noiseSrc);
@@ -2858,18 +2876,29 @@ setTimeout(showOnboarding, 500);
 document.addEventListener('keydown', (e) => {
   const tag = document.activeElement.tagName;
   if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
-  if (e.key === '?') { e.preventDefault(); showShortcuts(); }
-  else if (e.key === 'Escape') { closeShortcuts(); closeCheatsheet(); closeHistory(); }
-  else if (e.key === ' ') { e.preventDefault(); if (window._startingPitchFreq) playStartingPitch(); }
-  else if (e.key === 'm' || e.key === 'M') { e.preventDefault(); togglePitchDetection(); }
-  else if (e.key === 'r' || e.key === 'R') { e.preventDefault(); toggleRecording(); }
-  else if (e.key === 'ArrowLeft') { e.preventDefault(); prevMeasure(); }
-  else if (e.key === 'ArrowRight') { e.preventDefault(); nextMeasure(); }
-  else if (e.key === '1') switchSection('analyze');
-  else if (e.key === '2') switchSection('practice');
-  else if (e.key === '3') switchSection('vocal-coach');
-  else if (e.key === '4') switchSection('pitch-guide');
-  else if (e.key === '5') switchSection('analytics');
+  switch(e.key) {
+    case ' ':
+      e.preventDefault();
+      if (practiceData.length) playCurrentMeasure();
+      else if (window._startingPitchFreq) playStartingPitch();
+      break;
+    case 'm': case 'M': e.preventDefault(); togglePitchDetection(); break;
+    case 'r': case 'R': e.preventDefault(); toggleRecording(); break;
+    case 'ArrowLeft': e.preventDefault(); if (practiceData.length) prevMeasure(); break;
+    case 'ArrowRight': e.preventDefault(); if (practiceData.length) nextMeasure(); break;
+    case '?': case '/': e.preventDefault(); showShortcuts(); break;
+    case 'Escape':
+      closeShortcuts(); closeCheatsheet(); closeHistory();
+      if ($('authOverlay')) $('authOverlay').style.display = 'none';
+      if ($('videoOverlay')) $('videoOverlay').style.display = 'none';
+      if (_fullPiecePlaying || _singAlongActive) _fullPieceAbort = true;
+      break;
+    case '1': switchSection('analyze'); break;
+    case '2': switchSection('practice'); break;
+    case '3': switchSection('vocal-coach'); break;
+    case '4': switchSection('pitch-guide'); break;
+    case '5': switchSection('analytics'); break;
+  }
 });
 
 // ═══════════════════════════════════════════════════════════════
@@ -3910,6 +3939,236 @@ document.addEventListener('drop', e => {
 function exportAsPDF() {
   window.print();
 }
+
+// ═══════════════════════════════════════════════════════════════
+// PLAY FULL PIECE (bouncing ball note follower)
+// ═══════════════════════════════════════════════════════════════
+let _fullPiecePlaying = false;
+let _fullPieceAbort = false;
+
+async function playFullPiece() {
+  if (!practiceData.length) { showToast('Load solfege first', 'info'); return; }
+  if (_fullPiecePlaying) { _fullPieceAbort = true; return; }
+
+  _fullPiecePlaying = true;
+  _fullPieceAbort = false;
+  const btn = $('btnPlayFullPiece');
+  if (btn) btn.textContent = '\u25A0 Stop';
+  $('fullPieceProgress').style.display = 'block';
+
+  const bpm = parseInt(currentAnalysis?.tempo?.match(/\d+/)?.[0] || '120', 10);
+  const beatMs = (60 / bpm) * 1000;
+  const measureCards = document.querySelectorAll('#solfegeOutput > div > div');
+  let totalNotes = 0;
+  practiceData.forEach(m => { totalNotes += (m.notes?.length || 1); });
+  let notesPlayed = 0;
+
+  for (let mi = 0; mi < practiceData.length; mi++) {
+    if (_fullPieceAbort) break;
+    const m = practiceData[mi];
+    const card = measureCards[mi];
+
+    if (card) {
+      card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      card.style.transition = 'box-shadow 0.2s, border-color 0.2s';
+      card.style.borderColor = 'var(--gold)';
+      card.style.boxShadow = '0 0 20px rgba(212,168,83,0.3)';
+    }
+
+    const notes = m.notes || [];
+    const noteCells = card ? card.querySelectorAll('div[style*="flex-direction:column"]') : [];
+
+    for (let ni = 0; ni < Math.max(notes.length, 1); ni++) {
+      if (_fullPieceAbort) break;
+      const note = notes[ni];
+      const cell = noteCells[ni];
+
+      if (cell) {
+        cell.style.transition = 'background 0.1s';
+        cell.style.background = 'rgba(212,168,83,0.25)';
+        cell.style.borderRadius = '6px';
+      }
+
+      if (note) {
+        const parsed = parseNote(note);
+        if (parsed) playPiano(parsed.freq, Math.min(beatMs / 1000, 2));
+      }
+
+      notesPlayed++;
+      const pct = (notesPlayed / totalNotes) * 100;
+      $('fullPieceProgressFill').style.width = `${pct}%`;
+      $('fullPieceProgressText').textContent = `Measure ${mi + 1} / ${practiceData.length}`;
+
+      await new Promise(r => setTimeout(r, beatMs));
+
+      if (cell) { cell.style.background = ''; }
+    }
+
+    if (card) { card.style.borderColor = ''; card.style.boxShadow = ''; }
+  }
+
+  _fullPiecePlaying = false;
+  _fullPieceAbort = false;
+  if (btn) btn.textContent = '\u25B6 Play Full Piece';
+  if (!_fullPieceAbort) {
+    $('fullPieceProgressFill').style.width = '100%';
+    $('fullPieceProgressText').textContent = 'Complete';
+    setTimeout(() => { $('fullPieceProgress').style.display = 'none'; }, 2000);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SING-ALONG MODE
+// ═══════════════════════════════════════════════════════════════
+let _singAlongActive = false;
+
+async function startSingAlong() {
+  if (!practiceData.length) { showToast('Load solfege first', 'info'); return; }
+  if (_singAlongActive) { _fullPieceAbort = true; return; }
+
+  _singAlongActive = true;
+  _fullPieceAbort = false;
+  const btn = $('btnSingAlong');
+  if (btn) btn.textContent = '\u25A0 Stop Sing-Along';
+  $('fullPieceProgress').style.display = 'block';
+
+  let pitchCtxSA = null;
+  let analyserSA = null;
+  let streamSA = null;
+  let correctNotes = 0;
+  let totalNotes = 0;
+
+  try {
+    streamSA = await navigator.mediaDevices.getUserMedia({ audio: true });
+    pitchCtxSA = new (window.AudioContext || window.webkitAudioContext)();
+    const source = pitchCtxSA.createMediaStreamSource(streamSA);
+    analyserSA = pitchCtxSA.createAnalyser();
+    analyserSA.fftSize = 2048;
+    source.connect(analyserSA);
+  } catch (err) {
+    showToast('Microphone access required for sing-along', 'error');
+    _singAlongActive = false;
+    if (btn) btn.textContent = '\uD83C\uDFA4 Sing Along';
+    return;
+  }
+
+  function detectPitchSA() {
+    const buf = new Float32Array(analyserSA.fftSize);
+    analyserSA.getFloatTimeDomainData(buf);
+    let bestCorr = 0, bestOffset = -1;
+    const minSamples = Math.floor(pitchCtxSA.sampleRate / 1000);
+    const maxSamples = Math.floor(pitchCtxSA.sampleRate / 60);
+    for (let offset = minSamples; offset < maxSamples; offset++) {
+      let corr = 0;
+      for (let i = 0; i < maxSamples; i++) corr += buf[i] * buf[i + offset];
+      if (corr > bestCorr) { bestCorr = corr; bestOffset = offset; }
+    }
+    if (bestCorr < 0.01 || bestOffset < 1) return 0;
+    return pitchCtxSA.sampleRate / bestOffset;
+  }
+
+  const bpm = parseInt(currentAnalysis?.tempo?.match(/\d+/)?.[0] || '120', 10);
+  const beatMs = (60 / bpm) * 1000;
+  const measureCards = document.querySelectorAll('#solfegeOutput > div > div');
+
+  for (let mi = 0; mi < practiceData.length; mi++) {
+    if (_fullPieceAbort) break;
+    const m = practiceData[mi];
+    const card = measureCards[mi];
+    if (card) {
+      card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      card.style.borderColor = 'var(--violet)';
+      card.style.boxShadow = '0 0 20px rgba(139,127,212,0.3)';
+    }
+
+    const notes = m.notes || [];
+    const noteCells = card ? card.querySelectorAll('div[style*="flex-direction:column"]') : [];
+
+    for (let ni = 0; ni < Math.max(notes.length, 1); ni++) {
+      if (_fullPieceAbort) break;
+      const note = notes[ni];
+      const cell = noteCells[ni];
+      let expectedFreq = 0;
+
+      if (note) {
+        const parsed = parseNote(note);
+        if (parsed) {
+          expectedFreq = parsed.freq;
+          playPiano(parsed.freq, Math.min(beatMs / 1000, 2));
+        }
+      }
+
+      if (cell) {
+        cell.style.transition = 'background 0.1s';
+        cell.style.background = 'rgba(139,127,212,0.25)';
+        cell.style.borderRadius = '6px';
+      }
+
+      totalNotes++;
+      const startTime = Date.now();
+      let matched = false;
+
+      while (Date.now() - startTime < beatMs) {
+        if (_fullPieceAbort) break;
+        if (expectedFreq > 0) {
+          const sung = detectPitchSA();
+          if (sung > 0) {
+            const semitoneDiff = Math.abs(12 * Math.log2(sung / expectedFreq));
+            if (semitoneDiff < 1.5) { matched = true; }
+          }
+        }
+        await new Promise(r => setTimeout(r, 50));
+      }
+
+      if (matched) correctNotes++;
+      if (cell) {
+        cell.style.background = matched ? 'rgba(82,183,136,0.25)' : 'rgba(212,92,92,0.2)';
+        setTimeout(() => { cell.style.background = ''; }, 400);
+      }
+
+      const pct = (totalNotes / practiceData.reduce((a, m2) => a + Math.max((m2.notes?.length || 1), 1), 0)) * 100;
+      $('fullPieceProgressFill').style.width = `${pct}%`;
+      $('fullPieceProgressText').textContent = `Measure ${mi + 1} / ${practiceData.length} | Score: ${correctNotes}/${totalNotes}`;
+    }
+
+    if (card) { card.style.borderColor = ''; card.style.boxShadow = ''; }
+  }
+
+  if (streamSA) streamSA.getTracks().forEach(t => t.stop());
+  if (pitchCtxSA) try { pitchCtxSA.close(); } catch(e) {}
+
+  const score = totalNotes > 0 ? Math.round((correctNotes / totalNotes) * 100) : 0;
+  const label = score >= 90 ? 'Excellent!' : score >= 70 ? 'Great job!' : score >= 50 ? 'Keep practicing!' : 'Try again with slower tempo';
+  showToast(`Sing-along score: ${score}% (${correctNotes}/${totalNotes}) — ${label}`, score >= 70 ? 'success' : 'info', 5000);
+
+  _singAlongActive = false;
+  if (btn) btn.textContent = '\uD83C\uDFA4 Sing Along';
+  $('fullPieceProgressText').textContent = `Score: ${score}% — ${label}`;
+  setTimeout(() => { $('fullPieceProgress').style.display = 'none'; }, 4000);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// AUTO PAGE TURN IN PRACTICE MODE
+// ═══════════════════════════════════════════════════════════════
+const MEASURES_PER_PAGE = 8;
+
+function autoPageTurn() {
+  if (!practiceData.length) return;
+  const currentPage = Math.floor(practiceIndex / MEASURES_PER_PAGE);
+  const measureCards = document.querySelectorAll('#solfegeOutput > div > div');
+  const targetCardIndex = currentPage * MEASURES_PER_PAGE;
+  if (measureCards[targetCardIndex]) {
+    measureCards[targetCardIndex].scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+}
+
+// Patch showPracticeMeasure to trigger auto page turn
+const _origShowPracticeMeasure = showPracticeMeasure;
+showPracticeMeasure = function() {
+  _origShowPracticeMeasure();
+  autoPageTurn();
+};
+
 </script>
 
 <!-- Google Identity Services -->
