@@ -1,8 +1,8 @@
-// server.js — Solfai v9: Major overhaul
+// server.js — Solfai v10: Maximum Accuracy Overhaul
 // Architecture: Code calculates, AI extracts. All Gemini params snake_case.
-// Features: Two-pass analysis, triple solfege extraction, self-consistency voting,
-//   confidence scoring, music theory validation, correction cache, vocal coach,
-//   MusicXML parser, manual entry, retry with exponential backoff.
+// Features: 5-way consensus voting, dedicated key/pitch extraction, note-by-note
+//   reconciliation, enhanced music theory validation, enharmonic awareness,
+//   weighted majority voting, correction cache, vocal coach, MusicXML parser.
 
 import express from 'express';
 import { fileURLToPath } from 'url';
@@ -30,6 +30,10 @@ const GEMINI_MODEL = 'gemini-2.5-pro';
 const GEMINI_FLASH = 'gemini-2.5-flash';
 const BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
 const CORRECTIONS_FILE = join(__dirname, 'corrections.json');
+
+// Voting weights: Pro is more accurate, counts double
+const WEIGHT_PRO = 2;
+const WEIGHT_FLASH = 1;
 
 // ─── Correction Cache ─────────────────────────────────────
 function loadCorrections() {
@@ -134,6 +138,61 @@ const ANALYZE_SCHEMA = {
   required: ["key_signature", "time_signature", "starting_pitch", "dynamics", "flat_count", "sharp_count", "difficulty_overall"]
 };
 
+// Dedicated key signature extraction schema (simpler, focused)
+const KEY_SIG_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    flat_count: {
+      type: "INTEGER",
+      description: "Number of flat symbols (♭) between the clef and time signature. 0 if none."
+    },
+    sharp_count: {
+      type: "INTEGER",
+      description: "Number of sharp symbols (♯) between the clef and time signature. 0 if none."
+    },
+    confidence: {
+      type: "STRING",
+      enum: ["certain", "likely", "uncertain"]
+    }
+  },
+  required: ["flat_count", "sharp_count", "confidence"]
+};
+
+// Dedicated starting pitch schema
+const PITCH_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    pitch: {
+      type: "STRING",
+      description: "The first sung note with octave number.",
+      enum: [
+        "C3", "C#3", "D3", "Eb3", "E3", "F3", "F#3", "G3", "Ab3", "A3", "Bb3", "B3",
+        "C4", "C#4", "D4", "Eb4", "E4", "F4", "F#4", "G4", "Ab4", "A4", "Bb4", "B4",
+        "C5", "C#5", "D5", "Eb5", "E5", "F5", "F#5", "G5", "Ab5", "A5", "Bb5", "B5",
+        "C6", "D6", "E6", "F6", "G6"
+      ]
+    },
+    line_or_space: {
+      type: "STRING",
+      description: "Is the note head ON a line or IN a space?",
+      enum: ["on_line", "in_space"]
+    },
+    which_line_or_space: {
+      type: "INTEGER",
+      description: "Which line or space from bottom (1=lowest). Lines 1-5, Spaces 1-4."
+    },
+    has_accidental: {
+      type: "BOOLEAN",
+      description: "Does this specific note have an accidental (sharp, flat, natural) directly before it?"
+    },
+    measure_number: {
+      type: "INTEGER",
+      description: "Which measure is this note in? (1 = first measure with this vocal part)"
+    }
+  },
+  required: ["pitch", "line_or_space", "which_line_or_space"]
+};
+
 // ─── Key from flat/sharp count (CODE, not AI) ─────────────
 const KEY_FROM_COUNT = {
   '0': { major: 'C major', minor: 'A minor' },
@@ -162,7 +221,6 @@ function resolveKeyFromCounts(flatCount, sharpCount, geminiKey) {
   const entry = KEY_FROM_COUNT[code];
   if (!entry) return { key: geminiKey || 'Unknown', confident: false };
 
-  // Default to major unless Gemini explicitly says the correct relative minor
   const geminiSaysMinor = (geminiKey || '').toLowerCase().includes('minor');
   const geminiMatchesExpectedMinor = geminiSaysMinor &&
     (geminiKey || '').toLowerCase().replace(/\s+/g, '') === entry.minor.toLowerCase().replace(/\s+/g, '');
@@ -182,6 +240,70 @@ function resolveKeyFromCounts(flatCount, sharpCount, geminiKey) {
     geminiSaid: geminiKey,
     codeSaid: keyName,
   };
+}
+
+// ─── Weighted Majority Voting ─────────────────────────────
+// Each vote has a value and a weight. Returns the value with highest total weight.
+function weightedVote(votes) {
+  const tally = {};
+  for (const { value, weight } of votes) {
+    if (value == null || value === '' || value === undefined) continue;
+    const key = String(value).trim().toLowerCase();
+    if (!tally[key]) tally[key] = { value: String(value).trim(), totalWeight: 0, count: 0 };
+    tally[key].totalWeight += weight;
+    tally[key].count++;
+  }
+
+  let best = null;
+  for (const entry of Object.values(tally)) {
+    if (!best || entry.totalWeight > best.totalWeight) best = entry;
+  }
+  return best ? best.value : null;
+}
+
+// ─── Enharmonic Equivalence ───────────────────────────────
+const ENHARMONIC_MAP = {
+  'C#': 'Db', 'Db': 'C#',
+  'D#': 'Eb', 'Eb': 'D#',
+  'F#': 'Gb', 'Gb': 'F#',
+  'G#': 'Ab', 'Ab': 'G#',
+  'A#': 'Bb', 'Bb': 'A#',
+  'E#': 'F', 'Fb': 'E',
+  'B#': 'C', 'Cb': 'B',
+};
+
+function areEnharmonic(note1, note2) {
+  if (!note1 || !note2) return false;
+  const pc1 = note1.replace(/\d+$/, '');
+  const pc2 = note2.replace(/\d+$/, '');
+  const oct1 = note1.match(/\d+$/)?.[0];
+  const oct2 = note2.match(/\d+$/)?.[0];
+  if (pc1 === pc2 && oct1 === oct2) return true;
+
+  const midi1 = Note.midi(note1);
+  const midi2 = Note.midi(note2);
+  if (midi1 !== null && midi2 !== null) return midi1 === midi2;
+
+  return false;
+}
+
+// Pick the enharmonic spelling that matches the key signature
+function correctEnharmonicForKey(noteName, tonic) {
+  if (!noteName || !tonic) return noteName;
+
+  const scaleInfo = Scale.get(`${tonic} major`);
+  const scaleNotes = scaleInfo.notes || [];
+  const scalePCs = new Set(scaleNotes.map(n => Note.get(n).pc));
+
+  const pc = noteName.replace(/\d+$/, '');
+  const oct = noteName.match(/\d+$/)?.[0] || '';
+
+  if (scalePCs.has(pc)) return noteName;
+
+  const enharm = ENHARMONIC_MAP[pc];
+  if (enharm && scalePCs.has(enharm)) return enharm + oct;
+
+  return noteName;
 }
 
 // ─── Solfege from note names (CODE, not AI) ───────────────
@@ -207,12 +329,123 @@ function noteToSolfege(noteName, tonicName) {
   return map[interval] || noteName;
 }
 
-// ─── Music Theory Validation (uses tonal.js) ──────────────
+// ─── Note-by-Note Reconciliation ──────────────────────────
+// Instead of comparing entire measure strings, compare individual notes
+// across multiple extractions and pick the winner for each position.
+function noteByNoteReconcile(measureSets, tonic, voicePart) {
+  const maxMeasures = Math.max(...measureSets.map(s => s.length));
+  const reconciled = [];
+  const range = VOCAL_RANGES[voicePart] || VOCAL_RANGES['Soprano'];
+
+  for (let mIdx = 0; mIdx < maxMeasures; mIdx++) {
+    const candidates = measureSets.map(s => s[mIdx]).filter(Boolean);
+    if (!candidates.length) continue;
+
+    // Find the measure with the most notes (likely most complete)
+    const maxNotes = Math.max(...candidates.map(c => (c.notes || []).length));
+
+    const reconciledNotes = [];
+    const noteConfidences = [];
+
+    for (let nIdx = 0; nIdx < maxNotes; nIdx++) {
+      const noteVotes = [];
+
+      for (let cIdx = 0; cIdx < candidates.length; cIdx++) {
+        const notes = candidates[cIdx].notes || [];
+        if (nIdx < notes.length && notes[nIdx] !== '[?]') {
+          // Determine weight based on which extraction this is
+          // First 3 are Pro (weight 2), last 2 are Flash (weight 1)
+          const weight = cIdx < 3 ? WEIGHT_PRO : WEIGHT_FLASH;
+          noteVotes.push({ value: notes[nIdx], weight });
+        }
+      }
+
+      if (noteVotes.length === 0) {
+        reconciledNotes.push('[?]');
+        noteConfidences.push('low');
+        continue;
+      }
+
+      // Group votes by enharmonic equivalence
+      const groups = [];
+      for (const vote of noteVotes) {
+        let found = false;
+        for (const group of groups) {
+          if (areEnharmonic(group.canonical, vote.value)) {
+            group.totalWeight += vote.weight;
+            group.count++;
+            found = true;
+            break;
+          }
+        }
+        if (!found) {
+          groups.push({ canonical: vote.value, totalWeight: vote.weight, count: 1 });
+        }
+      }
+
+      groups.sort((a, b) => b.totalWeight - a.totalWeight);
+      let winner = groups[0].canonical;
+
+      // Correct enharmonic spelling for key
+      winner = correctEnharmonicForKey(winner, tonic);
+
+      // Validate against vocal range
+      const midi = Note.midi(winner);
+      if (midi !== null) {
+        if (midi < range.low - 3 && midi + 12 <= range.high + 3) {
+          const pc = Note.get(winner).pc;
+          const oct = Note.get(winner).oct;
+          winner = pc + (oct + 1);
+        } else if (midi > range.high + 3 && midi - 12 >= range.low - 3) {
+          const pc = Note.get(winner).pc;
+          const oct = Note.get(winner).oct;
+          winner = pc + (oct - 1);
+        }
+      }
+
+      reconciledNotes.push(winner);
+
+      // Confidence based on agreement
+      const totalVotes = noteVotes.length;
+      const winnerWeight = groups[0].totalWeight;
+      const totalWeight = noteVotes.reduce((s, v) => s + v.weight, 0);
+
+      if (totalVotes >= 3 && winnerWeight >= totalWeight * 0.8) {
+        noteConfidences.push('high');
+      } else if (totalVotes >= 2 && winnerWeight >= totalWeight * 0.5) {
+        noteConfidences.push('medium');
+      } else {
+        noteConfidences.push('low');
+      }
+    }
+
+    // Pick best lyrics from candidates
+    const lyrics = candidates.map(c => c.lyrics || '').sort((a, b) => b.length - a.length)[0] || '';
+
+    const measureNum = candidates[0].num ?? (mIdx + 1);
+    const hasDisagreement = noteConfidences.some(c => c === 'low' || c === 'medium');
+    const overallConfidence = noteConfidences.every(c => c === 'high') ? 'high' :
+      noteConfidences.some(c => c === 'low') ? 'low' : 'medium';
+
+    reconciled.push({
+      num: measureNum,
+      notes: reconciledNotes,
+      lyrics,
+      confidence: overallConfidence,
+      disagreement: hasDisagreement,
+      noteConfidences,
+    });
+  }
+
+  return reconciled;
+}
+
+// ─── Music Theory Validation (enhanced with enharmonic awareness) ──
 const VOCAL_RANGES = {
-  'Soprano': { low: 60, high: 79 },
-  'Alto': { low: 55, high: 76 },
-  'Tenor': { low: 48, high: 69 },
-  'Bass': { low: 40, high: 64 },
+  'Soprano': { low: 60, high: 79 },  // C4-G5
+  'Alto': { low: 55, high: 76 },     // G3-E5
+  'Tenor': { low: 48, high: 69 },    // C3-A4
+  'Bass': { low: 40, high: 64 },     // E2-E4
 };
 
 function validateAndFixNotes(measures, tonic, voicePart) {
@@ -231,6 +464,9 @@ function validateAndFixNotes(measures, tonic, voicePart) {
     }
   }
 
+  // Build set of valid pitch classes in the key (for diatonic checking)
+  const diatonicPCs = new Set(scaleNotes.map(n => Note.get(n).pc));
+
   for (const m of measures) {
     if (!m.notes || !m.notes.length) continue;
     const fixed = [];
@@ -242,9 +478,17 @@ function validateAndFixNotes(measures, tonic, voicePart) {
       const parsed = Note.get(n);
       if (!parsed.midi) { fixed.push(n); continue; }
 
-      // Fix 1: Key signature accidental enforcement
-      if (!parsed.acc && keyAccidentals[parsed.letter]) {
-        const corrected = parsed.letter + keyAccidentals[parsed.letter] + parsed.oct;
+      // Fix 1: Enharmonic correction — use spelling that matches key
+      const correctedEnharm = correctEnharmonicForKey(n, tonic);
+      if (correctedEnharm !== n) {
+        n = correctedEnharm;
+        corrections++;
+      }
+
+      // Fix 2: Key signature accidental enforcement
+      const reParsed = Note.get(n);
+      if (!reParsed.acc && keyAccidentals[reParsed.letter]) {
+        const corrected = reParsed.letter + keyAccidentals[reParsed.letter] + reParsed.oct;
         const corrMidi = Note.midi(corrected);
         if (corrMidi && corrMidi >= range.low - 5 && corrMidi <= range.high + 5) {
           n = corrected;
@@ -252,19 +496,19 @@ function validateAndFixNotes(measures, tonic, voicePart) {
         }
       }
 
-      // Fix 2: Octave plausibility
+      // Fix 3: Octave plausibility — snap to vocal range
       let midi = Note.midi(n);
       if (midi !== null) {
-        if (midi < range.low && midi + 12 <= range.high) {
+        if (midi < range.low - 3 && midi + 12 <= range.high + 3) {
           n = Note.get(n).pc + (Note.get(n).oct + 1);
           corrections++;
-        } else if (midi > range.high && midi - 12 >= range.low) {
+        } else if (midi > range.high + 3 && midi - 12 >= range.low - 3) {
           n = Note.get(n).pc + (Note.get(n).oct - 1);
           corrections++;
         }
       }
 
-      // Fix 3: Interval smoothing — if jump > major 9th, try other octave
+      // Fix 4: Interval smoothing — if jump > major 9th, try other octave
       if (i > 0 && fixed[i - 1] !== '[?]') {
         const prevMidi = Note.midi(fixed[i - 1]);
         const currMidi = Note.midi(n);
@@ -275,12 +519,52 @@ function validateAndFixNotes(measures, tonic, voicePart) {
             const down = currMidi - 12;
             const jumpUp = Math.abs(up - prevMidi);
             const jumpDown = Math.abs(down - prevMidi);
-            if (jumpDown < jump && down >= range.low) {
+            if (jumpDown < jump && down >= range.low - 2) {
               n = Note.get(n).pc + (Note.get(n).oct - 1);
               corrections++;
-            } else if (jumpUp < jump && up <= range.high) {
+            } else if (jumpUp < jump && up <= range.high + 2) {
               n = Note.get(n).pc + (Note.get(n).oct + 1);
               corrections++;
+            }
+          }
+        }
+      }
+
+      // Fix 5: Chromatic passing tone detection
+      // If a non-diatonic note appears between two diatonic notes a step apart,
+      // it's likely a chromatic passing tone — leave it alone. But if it's
+      // isolated and could be a misread, check if the diatonic version fits better.
+      if (i > 0 && i < m.notes.length - 1) {
+        const pc = Note.get(n).pc;
+        if (!diatonicPCs.has(pc)) {
+          const prevNote = fixed[i - 1];
+          const nextNote = m.notes[i + 1];
+          const prevMidi = Note.midi(prevNote);
+          const nextMidi = Note.midi(nextNote);
+          const currMidi = Note.midi(n);
+
+          if (prevMidi && nextMidi && currMidi) {
+            const isPassing = (
+              (currMidi > prevMidi && currMidi < nextMidi) ||
+              (currMidi < prevMidi && currMidi > nextMidi)
+            ) && Math.abs(currMidi - prevMidi) <= 2 && Math.abs(nextMidi - currMidi) <= 2;
+
+            // If NOT a chromatic passing tone, it might be a misread
+            if (!isPassing) {
+              // Check if natural version is diatonic and in range
+              const natural = Note.get(n).letter + (Note.get(n).oct || '');
+              const naturalMidi = Note.midi(natural);
+              if (naturalMidi && diatonicPCs.has(Note.get(natural).pc) &&
+                  naturalMidi >= range.low - 2 && naturalMidi <= range.high + 2) {
+                // Also check with key accidental
+                const withKeyAcc = keyAccidentals[Note.get(n).letter]
+                  ? Note.get(n).letter + keyAccidentals[Note.get(n).letter] + Note.get(n).oct
+                  : natural;
+                if (diatonicPCs.has(Note.get(withKeyAcc).pc)) {
+                  n = withKeyAcc;
+                  corrections++;
+                }
+              }
             }
           }
         }
@@ -294,6 +578,34 @@ function validateAndFixNotes(measures, tonic, voicePart) {
   }
 
   return corrections;
+}
+
+// ─── Starting Pitch Validation ────────────────────────────
+// Cross-check the starting pitch against the key signature
+function validateStartingPitch(pitch, tonic, voicePart) {
+  if (!pitch || pitch === 'Not determined') return pitch;
+
+  const range = VOCAL_RANGES[voicePart] || VOCAL_RANGES['Soprano'];
+  const midi = Note.midi(pitch);
+
+  // Check if in vocal range
+  if (midi !== null) {
+    if (midi < range.low - 5 || midi > range.high + 5) {
+      // Way out of range — try octave correction
+      if (midi < range.low && midi + 12 <= range.high + 3) {
+        const pc = Note.get(pitch).pc;
+        const oct = Note.get(pitch).oct;
+        return pc + (oct + 1);
+      } else if (midi > range.high && midi - 12 >= range.low - 3) {
+        const pc = Note.get(pitch).pc;
+        const oct = Note.get(pitch).oct;
+        return pc + (oct - 1);
+      }
+    }
+  }
+
+  // Correct enharmonic spelling for key
+  return correctEnharmonicForKey(pitch, tonic);
 }
 
 // ─── Image preprocessing with sharp ───────────────────────
@@ -310,12 +622,27 @@ async function preprocessForGemini(base64Data, mode = 'full') {
           width: Math.floor(meta.width * 0.35),
           height: Math.floor(meta.height * 0.22)
         })
-        .resize({ width: 1200 })
+        .resize({ width: 1400 })
+        .grayscale()
+        .normalise()
+        .sharpen({ sigma: 2.5 })
+        .threshold(175)
+        .jpeg({ quality: 97 });
+    } else if (mode === 'first_system') {
+      // Crop to first ~30% of height for starting pitch detection
+      const meta = await sharp(buf).metadata();
+      pipeline = sharp(buf)
+        .extract({
+          left: 0, top: 0,
+          width: meta.width,
+          height: Math.floor(meta.height * 0.3)
+        })
+        .resize({ width: 1600 })
         .grayscale()
         .normalise()
         .sharpen({ sigma: 2.0 })
-        .threshold(180)
-        .jpeg({ quality: 95 });
+        .threshold(170)
+        .jpeg({ quality: 96 });
     } else if (mode === 'binarize') {
       pipeline = sharp(buf)
         .grayscale()
@@ -323,6 +650,14 @@ async function preprocessForGemini(base64Data, mode = 'full') {
         .sharpen({ sigma: 2.0 })
         .threshold(160)
         .jpeg({ quality: 95 });
+    } else if (mode === 'high_contrast') {
+      // Maximum contrast for difficult images
+      pipeline = sharp(buf)
+        .grayscale()
+        .normalise()
+        .sharpen({ sigma: 3.0 })
+        .threshold(150)
+        .jpeg({ quality: 97 });
     } else {
       pipeline = sharp(buf)
         .grayscale()
@@ -340,7 +675,7 @@ async function preprocessForGemini(base64Data, mode = 'full') {
 }
 
 // ─── Image segmentation for tall images ───────────────────
-async function segmentImage(base64Data, maxSegments = 3) {
+async function segmentImage(base64Data, maxSegments = 4) {
   try {
     const buf = Buffer.from(base64Data, 'base64');
     const meta = await sharp(buf).metadata();
@@ -349,15 +684,16 @@ async function segmentImage(base64Data, maxSegments = 3) {
       return null;
     }
 
-    const numSegments = Math.min(maxSegments, Math.ceil(meta.height / (meta.width * 0.4)));
+    const numSegments = Math.min(maxSegments, Math.ceil(meta.height / (meta.width * 0.35)));
     if (numSegments <= 1) return null;
 
+    const overlapPx = Math.floor(meta.height * 0.03); // 3% overlap to avoid cutting through staves
     const segmentHeight = Math.ceil(meta.height / numSegments);
     const segments = [];
 
     for (let i = 0; i < numSegments; i++) {
-      const top = i * segmentHeight;
-      const height = Math.min(segmentHeight, meta.height - top);
+      const top = Math.max(0, i * segmentHeight - (i > 0 ? overlapPx : 0));
+      const height = Math.min(segmentHeight + overlapPx, meta.height - top);
       if (height < 100) break;
 
       const segBuf = await sharp(buf)
@@ -491,7 +827,7 @@ app.post('/api/analyze', async (req, res) => {
       return res.status(400).json({ error: 'No image provided' });
     }
 
-    console.log(`[Solfai v9] mode=${mode}, part=${part}, parts=${imageParts.length}, mime=${imageMime || 'jpeg'}`);
+    console.log(`[Solfai v10] mode=${mode}, part=${part}, parts=${imageParts.length}, mime=${imageMime || 'jpeg'}`);
 
     switch (mode) {
       case 'analyze': return await handleAnalyze(res, apiKey, imageParts, part, imageBase64, pdfPages);
@@ -534,32 +870,68 @@ function handleCorrection(res, body) {
   return res.status(200).json({ ok: true });
 }
 
-// ─── ANALYZE (two-pass + self-consistency voting) ─────────
+// ═══════════════════════════════════════════════════════════
+// ANALYZE — 5-way consensus + dedicated key/pitch extraction
+// ═══════════════════════════════════════════════════════════
 async function handleAnalyze(res, apiKey, imageParts, part, rawBase64, pdfPages) {
   const hashSrc = pdfPages?.[0] || rawBase64 || '';
   const imgHash = hashImage(hashSrc);
   const corrections = loadCorrections();
   const cached = corrections[imgHash];
 
-  // Preprocess images
-  const processedParts = [];
-  for (const p of imageParts.slice(0, 5)) {
-    if (p.inlineData?.mimeType === 'application/pdf') {
-      processedParts.push(p);
-    } else if (p.inlineData?.mimeType === 'image/jpeg') {
-      try {
-        const enhanced = await preprocessForGemini(p.inlineData.data, 'full');
-        processedParts.push({ inlineData: { mimeType: 'image/jpeg', data: enhanced } });
-      } catch (e) {
-        processedParts.push(p);
+  // Preprocess images in parallel
+  const processedParts = await Promise.all(
+    imageParts.slice(0, 5).map(async (p) => {
+      if (p.inlineData?.mimeType === 'application/pdf') return p;
+      if (p.inlineData?.mimeType === 'image/jpeg') {
+        try {
+          const enhanced = await preprocessForGemini(p.inlineData.data, 'full');
+          return { inlineData: { mimeType: 'image/jpeg', data: enhanced } };
+        } catch (e) { return p; }
       }
-    } else {
-      processedParts.push(p);
+      return p;
+    })
+  );
+
+  // Prepare specialized image crops IN PARALLEL
+  const firstJpeg = imageParts.find(p => p.inlineData?.mimeType === 'image/jpeg');
+  let keyRegionParts = [];
+  let firstSystemParts = [];
+
+  if (firstJpeg) {
+    const [keyData, firstSysData, hiContrast] = await Promise.all([
+      preprocessForGemini(firstJpeg.inlineData.data, 'key_region').catch(() => null),
+      preprocessForGemini(firstJpeg.inlineData.data, 'first_system').catch(() => null),
+      preprocessForGemini(firstJpeg.inlineData.data, 'high_contrast').catch(() => null),
+    ]);
+    if (keyData) keyRegionParts = [{ inlineData: { mimeType: 'image/jpeg', data: keyData } }];
+    if (firstSysData) firstSystemParts = [{ inlineData: { mimeType: 'image/jpeg', data: firstSysData } }];
+    if (hiContrast) {
+      // Add high-contrast version to processed parts for Flash reads
+      processedParts.push({ inlineData: { mimeType: 'image/jpeg', data: hiContrast } });
     }
   }
 
-  // ═══ PASS 1: Structured extraction with self-consistency voting ═══
-  const pass1SystemPrompt = `You are an expert music engraver and choir director reading sheet music with extreme precision.
+  // ═══ PHASE 1: Dedicated key signature extraction (3 reads) ═══
+  // ═══ PHASE 2: Full structured extraction (5-way consensus) ═══
+  // ═══ PHASE 3: Dedicated starting pitch extraction (3 reads) ═══
+  // All phases run IN PARALLEL for speed
+
+  const keySigPrompt = `You are an expert music engraver. Count the accidentals between the CLEF SYMBOL and the TIME SIGNATURE.
+These symbols define the key signature:
+- Flat (♭): looks like a lowercase 'b' — count each one
+- Sharp (♯): looks like a hash/pound '#' — count each one
+- Do NOT count accidentals that appear before individual notes in the music
+- Do NOT count naturals (♮)
+- IGNORE any watermark text overlaid on the music
+
+PROCEDURE:
+1. Find the clef symbol (treble clef 𝄞 or bass clef 𝄢) at the left edge of the first staff
+2. Look immediately to the RIGHT of the clef
+3. Count ONLY the flat or sharp symbols BEFORE the time signature numbers
+4. Report the exact count`;
+
+  const fullExtractPrompt = `You are an expert music engraver and choir director reading sheet music with extreme precision.
 
 CRITICAL RULES:
 - If any image is a title/cover page with no staves or notes, SKIP IT and look at the next image.
@@ -578,81 +950,226 @@ Spaces bottom→top: F4, A4, C5, E5 (FACE).
 - A note ON a line: line passes through center of note head.
 - A note IN a space: note head between two lines.
 - Do NOT confuse 3rd line (B4) with 3rd space (C5).
+- Middle C (C4) is on the first ledger line below treble staff.
 - Treble-8 clef (tenor): ALL pitches one octave lower.
 
 STARTING PITCH — BASS CLEF:
 Lines bottom→top: G2, B2, D3, F3, A3. Spaces: A2, C3, E3, G3.
+Middle C (C4) is on the first ledger line above bass staff.
 
 STARTING PITCH PROCEDURE:
 1. Find vocal staff (has lyrics underneath). Skip piano intro measures.
 2. Find VERY FIRST note with a lyric syllable below it.
-3. Count: is it ON a line or IN a space? Which one (from bottom)?
-4. Look up correct pitch from reference above. Double-check with adjacent notes.`;
+3. Is the note head ON a line or IN a space? Count from bottom: which line (1-5) or space (1-4)?
+4. Look up the pitch from the reference above.
+5. Double-check: is it within vocal range? Soprano C4-G5, Alto G3-E5, Tenor C3-A4, Bass E2-E4.`;
 
-  const pass1UserText = `Extract all musical data for the ${part} part. Skip title/cover pages. Be precise about accidental counting.`;
+  const pitchPrompt = `You are a music reading specialist. Your ONLY task is to identify the FIRST SUNG NOTE.
 
-  // Run 2 parallel extraction calls for self-consistency
-  const [pass1aRaw, pass1bRaw] = await Promise.all([
-    callGemini(apiKey, pass1SystemPrompt, [
-      { text: pass1UserText },
-      ...processedParts,
-    ], {
-      temperature: 0,
-      maxOutputTokens: 4096,
-      responseSchema: ANALYZE_SCHEMA,
-      thinkingBudget: 10000,
-    }),
-    callGemini(apiKey, pass1SystemPrompt, [
-      { text: `Second independent read: Extract all musical data for the ${part} part. Double-check every value.` },
-      ...processedParts,
-    ], {
-      temperature: 0,
-      maxOutputTokens: 4096,
-      responseSchema: ANALYZE_SCHEMA,
-      thinkingBudget: 10000,
-      model: GEMINI_FLASH,
-    }),
-  ]);
+STEP BY STEP:
+1. Find the vocal staff — the staff with lyrics (text syllables) underneath the notes.
+2. SKIP any piano/organ introduction measures. Look for where the TEXT starts.
+3. The very first note that has a lyric syllable below it is the starting pitch.
+4. Determine if this note is ON a staff line (line goes through the note head center) or IN a space (note head sits between two lines).
+5. Count from the bottom: which line (1=E4, 2=G4, 3=B4, 4=D5, 5=F5) or which space (1=F4, 2=A4, 3=C5, 4=E5).
+6. Check for any accidental (♯, ♭, ♮) directly before this note.
+7. For treble-8 clef: subtract one octave from all pitches.
+8. For bass clef: Lines 1=G2, 2=B2, 3=D3, 4=F3, 5=A3. Spaces 1=A2, 2=C3, 3=E3, 4=G3.
 
-  let rawA, rawB;
-  try { rawA = JSON.parse(pass1aRaw); } catch (e) {
-    console.error('[Solfai] Pass1A parse failed:', e.message);
-    rawA = {};
+COMMON MISTAKES TO AVOID:
+- Confusing 3rd line (B4) with 3rd space (C5) — they look similar but are different pitches
+- Reading piano notes instead of vocal notes
+- Missing a key signature accidental that applies to this note
+- Wrong octave number
+
+For SATB: Soprano=top treble staff stems up, Alto=bottom treble stems down, Tenor=treble-8/bass stems up, Bass=bottom bass stems down.`;
+
+  const extractText = `Extract all musical data for the ${part} part. Skip title/cover pages. Be precise about accidental counting.`;
+
+  // Launch ALL phases in parallel
+  const allPromises = [
+    // KEY SIG: 3 dedicated reads (2 Pro + 1 Flash)
+    callGemini(apiKey, keySigPrompt,
+      [{ text: 'Count the key signature accidentals.' }, ...(keyRegionParts.length ? keyRegionParts : processedParts.slice(0, 1))],
+      { temperature: 0, maxOutputTokens: 128, responseSchema: KEY_SIG_SCHEMA, thinkingBudget: 4000 }
+    ),
+    callGemini(apiKey, keySigPrompt,
+      [{ text: 'Second read: Count key signature accidentals again, independently.' }, ...(keyRegionParts.length ? keyRegionParts : processedParts.slice(0, 1))],
+      { temperature: 0, maxOutputTokens: 128, responseSchema: KEY_SIG_SCHEMA, thinkingBudget: 4000 }
+    ),
+    callGemini(apiKey, keySigPrompt,
+      [{ text: 'Count the flats and sharps in the key signature.' }, ...processedParts.slice(0, 1)],
+      { model: GEMINI_FLASH, temperature: 0, maxOutputTokens: 128, responseSchema: KEY_SIG_SCHEMA, thinkingBudget: 0 }
+    ),
+
+    // FULL EXTRACTION: 3 reads (2 Pro + 1 Flash) for self-consistency
+    callGemini(apiKey, fullExtractPrompt,
+      [{ text: extractText }, ...processedParts],
+      { temperature: 0, maxOutputTokens: 4096, responseSchema: ANALYZE_SCHEMA, thinkingBudget: 12000 }
+    ),
+    callGemini(apiKey, fullExtractPrompt,
+      [{ text: `Independent verification: ${extractText} Double-check each value.` }, ...processedParts],
+      { temperature: 0, maxOutputTokens: 4096, responseSchema: ANALYZE_SCHEMA, thinkingBudget: 12000 }
+    ),
+    callGemini(apiKey, fullExtractPrompt,
+      [{ text: `Third independent read: ${extractText}` }, ...processedParts],
+      { model: GEMINI_FLASH, temperature: 0, maxOutputTokens: 4096, responseSchema: ANALYZE_SCHEMA, thinkingBudget: 0 }
+    ),
+
+    // STARTING PITCH: 3 dedicated reads (2 Pro + 1 Flash)
+    callGemini(apiKey, pitchPrompt,
+      [{ text: `Find the first sung note for the ${part} part.` }, ...(firstSystemParts.length ? firstSystemParts : processedParts.slice(0, 1))],
+      { temperature: 0, maxOutputTokens: 256, responseSchema: PITCH_SCHEMA, thinkingBudget: 6000 }
+    ),
+    callGemini(apiKey, pitchPrompt,
+      [{ text: `Second read: Find the first sung note for ${part}. Be extra careful about line vs space.` }, ...(firstSystemParts.length ? firstSystemParts : processedParts.slice(0, 1))],
+      { temperature: 0, maxOutputTokens: 256, responseSchema: PITCH_SCHEMA, thinkingBudget: 6000 }
+    ),
+    callGemini(apiKey, pitchPrompt,
+      [{ text: `Find the starting pitch for ${part}.` }, ...processedParts.slice(0, 1)],
+      { model: GEMINI_FLASH, temperature: 0, maxOutputTokens: 256, responseSchema: PITCH_SCHEMA, thinkingBudget: 0 }
+    ),
+  ];
+
+  const results = await Promise.all(allPromises);
+
+  // Parse key signature votes
+  const keyVotes = [];
+  for (let i = 0; i < 3; i++) {
+    try {
+      const ks = JSON.parse(results[i]);
+      const flatCount = Number(ks.flat_count) || 0;
+      const sharpCount = Number(ks.sharp_count) || 0;
+      const weight = i < 2 ? WEIGHT_PRO : WEIGHT_FLASH;
+      keyVotes.push({ flatCount, sharpCount, weight, confidence: ks.confidence });
+    } catch (e) {
+      console.warn(`[Solfai] Key sig read ${i + 1} parse failed`);
+    }
   }
-  try { rawB = JSON.parse(pass1bRaw); } catch (e) {
-    console.error('[Solfai] Pass1B parse failed:', e.message);
-    rawB = {};
+
+  // Weighted vote on flat/sharp counts
+  const flatCountWinner = weightedVote(keyVotes.map(v => ({ value: v.flatCount, weight: v.weight })));
+  const sharpCountWinner = weightedVote(keyVotes.map(v => ({ value: v.sharpCount, weight: v.weight })));
+  const votedFlats = Number(flatCountWinner) || 0;
+  const votedSharps = Number(sharpCountWinner) || 0;
+
+  console.log(`[Solfai] Key votes: ${keyVotes.map(v => `${v.flatCount}b/${v.sharpCount}s`).join(', ')} → ${votedFlats}b/${votedSharps}s`);
+
+  // Parse full extraction results
+  const fullExtractions = [];
+  for (let i = 3; i < 6; i++) {
+    try {
+      fullExtractions.push(JSON.parse(results[i]));
+    } catch (e) {
+      console.warn(`[Solfai] Full extraction ${i - 2} parse failed`);
+      fullExtractions.push({});
+    }
   }
 
-  // Self-consistency: use Pro result as primary, Flash as verification
-  const raw = rawA;
-
-  // If key/time/pitch disagree, run tiebreaker
-  let tiebreakerNote = null;
-  const keysDisagree = rawA.key_signature !== rawB.key_signature;
-  const pitchDisagree = rawA.starting_pitch !== rawB.starting_pitch;
-
-  if (keysDisagree || pitchDisagree) {
-    console.log(`[Solfai] Self-consistency disagreement: key=${keysDisagree}, pitch=${pitchDisagree}`);
-    tiebreakerNote = `Pro read: key=${rawA.key_signature}, pitch=${rawA.starting_pitch}. Flash read: key=${rawB.key_signature}, pitch=${rawB.starting_pitch}.`;
+  // Parse starting pitch votes
+  const pitchVotes = [];
+  for (let i = 6; i < 9; i++) {
+    try {
+      const pd = JSON.parse(results[i]);
+      const weight = i < 8 ? WEIGHT_PRO : WEIGHT_FLASH;
+      pitchVotes.push({ value: pd.pitch, weight, lineOrSpace: pd.line_or_space, whichNum: pd.which_line_or_space });
+    } catch (e) {
+      console.warn(`[Solfai] Pitch read ${i - 5} parse failed`);
+    }
   }
 
-  // Code-calculated key from flat/sharp count
-  const keyResult = resolveKeyFromCounts(
-    Number(raw.flat_count) || 0,
-    Number(raw.sharp_count) || 0,
-    raw.key_signature
+  // Also include pitch from full extractions
+  for (let i = 0; i < fullExtractions.length; i++) {
+    if (fullExtractions[i].starting_pitch) {
+      const weight = i < 2 ? WEIGHT_PRO : WEIGHT_FLASH;
+      pitchVotes.push({ value: fullExtractions[i].starting_pitch, weight: weight * 0.5 }); // lower weight since these aren't dedicated
+    }
+  }
+
+  // Weighted vote on starting pitch (with enharmonic grouping)
+  const pitchGroups = [];
+  for (const vote of pitchVotes) {
+    if (!vote.value) continue;
+    let found = false;
+    for (const group of pitchGroups) {
+      if (areEnharmonic(group.canonical, vote.value)) {
+        group.totalWeight += vote.weight;
+        group.count++;
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
+      pitchGroups.push({ canonical: vote.value, totalWeight: vote.weight, count: 1 });
+    }
+  }
+  pitchGroups.sort((a, b) => b.totalWeight - a.totalWeight);
+  const votedPitch = pitchGroups[0]?.canonical || fullExtractions[0]?.starting_pitch || 'Not determined';
+
+  console.log(`[Solfai] Pitch votes: ${pitchVotes.map(v => v.value).join(', ')} → ${votedPitch}`);
+
+  // Use primary Pro extraction as base, enriched by consensus
+  const raw = fullExtractions[0];
+
+  // Also get flat/sharp counts from full extractions for cross-validation
+  const fullKeyVotes = fullExtractions.map((ext, i) => ({
+    flatCount: Number(ext.flat_count) || 0,
+    sharpCount: Number(ext.sharp_count) || 0,
+    weight: i < 2 ? WEIGHT_PRO : WEIGHT_FLASH,
+  }));
+
+  // Combine dedicated key reads with full extraction key reads
+  const allKeyVotes = [...keyVotes, ...fullKeyVotes];
+  const finalFlats = Number(weightedVote(allKeyVotes.map(v => ({ value: v.flatCount, weight: v.weight })))) || 0;
+  const finalSharps = Number(weightedVote(allKeyVotes.map(v => ({ value: v.sharpCount, weight: v.weight })))) || 0;
+
+  console.log(`[Solfai] Combined key votes (${allKeyVotes.length} total): ${finalFlats}b/${finalSharps}s`);
+
+  // Code-calculated key from voted flat/sharp count
+  const geminiKeyVote = weightedVote(
+    fullExtractions.map((ext, i) => ({
+      value: ext.key_signature,
+      weight: i < 2 ? WEIGHT_PRO : WEIGHT_FLASH,
+    }))
   );
+  const keyResult = resolveKeyFromCounts(finalFlats, finalSharps, geminiKeyVote);
 
   // Apply cached corrections
   const finalKey = cached?.keySignature || keyResult.key;
-  const finalPitch = cached?.startingPitch || raw.starting_pitch || 'Not determined';
-
-  // Pre-calculate solfege from first_notes
   const tonic = finalKey.split(' ')[0];
-  const firstNotesSolfege = (raw.first_notes || []).map(n =>
+
+  // Validate starting pitch against key and range
+  const validatedPitch = validateStartingPitch(votedPitch, tonic, part);
+  const finalPitch = cached?.startingPitch || validatedPitch;
+
+  // Consensus on other fields
+  const votedTime = weightedVote(
+    fullExtractions.map((ext, i) => ({
+      value: ext.time_signature,
+      weight: i < 2 ? WEIGHT_PRO : WEIGHT_FLASH,
+    }))
+  ) || raw.time_signature;
+
+  const votedTempo = weightedVote(
+    fullExtractions.map((ext, i) => ({
+      value: ext.tempo,
+      weight: i < 2 ? WEIGHT_PRO : WEIGHT_FLASH,
+    }))
+  ) || raw.tempo;
+
+  // Pre-calculate solfege from first_notes (use longest first_notes array)
+  const bestFirstNotes = fullExtractions
+    .map(ext => ext.first_notes || [])
+    .sort((a, b) => b.length - a.length)[0];
+  const firstNotesSolfege = bestFirstNotes.map(n =>
     noteToSolfege(n.replace(/\d+$/, ''), tonic)
   );
+
+  // Confidence report
+  const keyAgreement = allKeyVotes.every(v => v.flatCount === finalFlats && v.sharpCount === finalSharps);
+  const pitchAgreement = pitchGroups.length > 0 && pitchGroups[0].count >= 3;
+
+  console.log(`[Solfai] Confidence: key=${keyAgreement ? 'unanimous' : 'voted'}, pitch=${pitchAgreement ? 'strong' : 'weak'}`);
 
   // ═══ PASS 2: Human analysis with Google Search grounding ═══
   const pass2SystemPrompt = `You are a patient, encouraging choir director writing a practice guide for a ${part} singer.
@@ -661,16 +1178,15 @@ If you can identify the piece, use Google Search to verify the key and get accur
 
   const pass2UserText = `Write a complete analysis for this ${part} singer.
 
-Verified musical data:
+Verified musical data (consensus of ${allKeyVotes.length} independent reads):
 - Key: ${finalKey}${!keyResult.confident && keyResult.geminiSaid !== keyResult.codeSaid ? ` (Note: visual count suggests ${keyResult.codeSaid}, AI read ${keyResult.geminiSaid})` : ''}
-- Time Signature: ${raw.time_signature}
-- Tempo: ${raw.tempo}
-- Starting Pitch: ${finalPitch}
+- Time Signature: ${votedTime}
+- Tempo: ${votedTempo}
+- Starting Pitch: ${finalPitch}${pitchAgreement ? '' : ' (low confidence — verify manually)'}
 - Composer: ${raw.composer_name || 'unknown'}
 - Title: ${raw.piece_title || 'unknown'}
 - Language: ${raw.lyrics_language || 'English'}
 - First line of lyrics: "${raw.first_lyrics || 'not extracted'}"
-${tiebreakerNote ? `\nNote: Two independent reads disagreed on some values. ${tiebreakerNote}` : ''}
 
 Write a JSON response with this exact structure:
 {
@@ -711,14 +1227,15 @@ Output ONLY valid JSON.`;
 
   const structured = {
     keySignature: finalKey,
-    keyConfident: keyResult.confident,
+    keyConfident: keyResult.confident || keyAgreement,
     keyWarning: !keyResult.confident && keyResult.geminiSaid !== keyResult.codeSaid
       ? `Visual count: ${keyResult.codeSaid} | AI read: ${keyResult.geminiSaid}`
       : null,
-    timeSignature: raw.time_signature || 'Not determined',
-    tempo: raw.tempo === 'none' ? 'No tempo marking' : (raw.tempo || 'Not marked'),
+    timeSignature: votedTime || 'Not determined',
+    tempo: votedTempo === 'none' ? 'No tempo marking' : (votedTempo || 'Not marked'),
     dynamics: raw.dynamics === 'none' ? 'None visible' : (raw.dynamics || 'None visible'),
     startingPitch: finalPitch,
+    pitchConfident: pitchAgreement,
     difficulty: {
       overall: raw.difficulty_overall || 5,
       rhythm: raw.difficulty_rhythm || 4,
@@ -727,7 +1244,7 @@ Output ONLY valid JSON.`;
       text: raw.difficulty_text || 3,
     },
     firstNotesSolfege: firstNotesSolfege.length > 0 ? firstNotesSolfege : null,
-    firstNotes: raw.first_notes || [],
+    firstNotes: bestFirstNotes,
     firstLyrics: raw.first_lyrics || null,
     overview: analysis.overview || '',
     practiceTips: Array.isArray(analysis.practiceTips) ? analysis.practiceTips : [],
@@ -738,8 +1255,10 @@ Output ONLY valid JSON.`;
     pronunciation: analysis.pronunciation || { language: 'English', needsGuide: false, words: [] },
     _imageHash: imgHash,
     _selfConsistency: {
-      keysAgree: !keysDisagree,
-      pitchAgree: !pitchDisagree,
+      keysAgree: keyAgreement,
+      pitchAgree: pitchAgreement,
+      totalKeyReads: allKeyVotes.length,
+      totalPitchReads: pitchVotes.length,
     },
   };
 
@@ -752,7 +1271,7 @@ function buildTextSummary(s, part) {
     `Time Signature: ${s.timeSignature}`,
     `Tempo: ${s.tempo}`,
     `Dynamics: ${s.dynamics}`,
-    `Starting Pitch (${part}): ${s.startingPitch}`,
+    `Starting Pitch (${part}): ${s.startingPitch}${s.pitchConfident === false ? ' ⚠️ Low confidence' : ''}`,
     `Difficulty Overall: ${s.difficulty.overall}/10`,
     `---`,
     `BREAKDOWN:`,
@@ -765,35 +1284,46 @@ function buildTextSummary(s, part) {
   ].filter(Boolean).join('\n');
 }
 
-// ─── SOLFEGE: Triple extraction + music theory validation ─
+// ═══════════════════════════════════════════════════════════
+// SOLFEGE — 5-way extraction + note-by-note reconciliation
+// ═══════════════════════════════════════════════════════════
 async function handleSolfege(res, apiKey, imageParts, part) {
   const startTime = Date.now();
 
   // Preprocess images with binarization
-  const processedParts = [];
-  for (const p of imageParts.slice(0, 4)) {
-    if (p.inlineData?.mimeType === 'image/jpeg') {
-      try {
-        const enhanced = await preprocessForGemini(p.inlineData.data, 'binarize');
-        processedParts.push({ inlineData: { mimeType: 'image/jpeg', data: enhanced } });
-      } catch (e) { processedParts.push(p); }
-    } else {
-      processedParts.push(p);
-    }
+  const processedParts = await Promise.all(
+    imageParts.slice(0, 4).map(async (p) => {
+      if (p.inlineData?.mimeType === 'image/jpeg') {
+        try {
+          const enhanced = await preprocessForGemini(p.inlineData.data, 'binarize');
+          return { inlineData: { mimeType: 'image/jpeg', data: enhanced } };
+        } catch (e) { return p; }
+      }
+      return p;
+    })
+  );
+
+  // High contrast version for Flash reads
+  const firstJpeg = imageParts.find(p => p.inlineData?.mimeType === 'image/jpeg');
+  let highContrastParts = processedParts;
+  if (firstJpeg) {
+    try {
+      const hc = await preprocessForGemini(firstJpeg.inlineData.data, 'high_contrast');
+      highContrastParts = [{ inlineData: { mimeType: 'image/jpeg', data: hc } }];
+    } catch (e) { /* use processed */ }
   }
 
   // Key region crop for key sig extraction
-  const firstJpegForKey = imageParts.find(p => p.inlineData?.mimeType === 'image/jpeg');
   let keyRegionPart = null;
-  if (firstJpegForKey) {
+  if (firstJpeg) {
     try {
-      const keyData = await preprocessForGemini(firstJpegForKey.inlineData.data, 'key_region');
+      const keyData = await preprocessForGemini(firstJpeg.inlineData.data, 'key_region');
       keyRegionPart = { inlineData: { mimeType: 'image/jpeg', data: keyData } };
     } catch (e) { /* use full image */ }
   }
 
-  // Step 1: Staff ID + key sig extraction IN PARALLEL
-  const [staffRaw, keySigRaw] = await Promise.all([
+  // Step 1: Staff ID + key sig extraction IN PARALLEL (3 key reads)
+  const [staffRaw, keySig1Raw, keySig2Raw, keySig3Raw] = await Promise.all([
     callGemini(apiKey,
       `You are reading sheet music. Which staff number (counting from top, starting at 1) has lyrics below it?
 For SATB: Soprano=staff 1 (top treble), Alto=staff 2 (bottom treble), Tenor=staff 3 (treble-8 or bass), Bass=staff 4 (bottom bass).
@@ -805,9 +1335,22 @@ Output ONLY JSON: {"vocal_staff_number": N, "total_staves": M, "clef": "treble" 
     callGemini(apiKey,
       `Count the accidentals between the clef symbol and the time signature. These define the key signature.
 IGNORE any watermark text overlaid on the music.
-Flats look like ♭ and sharps look like ♯.
+Flats look like ♭ and sharps look like ♯. Count each one carefully.
 Output ONLY JSON: {"sharps": N, "flats": N}`,
-      [{ text: 'How many sharps and flats in the key signature?' }, ...(keyRegionPart ? [keyRegionPart] : processedParts.slice(0, 1))],
+      [{ text: 'Count key signature accidentals.' }, ...(keyRegionPart ? [keyRegionPart] : processedParts.slice(0, 1))],
+      { temperature: 0, maxOutputTokens: 64, thinkingBudget: 3000 }
+    ),
+    callGemini(apiKey,
+      `Count the accidentals between the clef symbol and the time signature.
+Flats (♭) and sharps (♯) only. Ignore naturals and note-level accidentals.
+Output ONLY JSON: {"sharps": N, "flats": N}`,
+      [{ text: 'Second read: count key signature accidentals.' }, ...(keyRegionPart ? [keyRegionPart] : processedParts.slice(0, 1))],
+      { temperature: 0, maxOutputTokens: 64, thinkingBudget: 3000 }
+    ),
+    callGemini(apiKey,
+      `Count flats and sharps in the key signature (between clef and time signature).
+Output ONLY JSON: {"sharps": N, "flats": N}`,
+      [{ text: 'Count key signature.' }, ...processedParts.slice(0, 1)],
       { model: GEMINI_FLASH, temperature: 0, maxOutputTokens: 64, thinkingBudget: 0 }
     ),
   ]);
@@ -816,14 +1359,26 @@ Output ONLY JSON: {"sharps": N, "flats": N}`,
   try { staffInfo = JSON.parse(staffRaw.replace(/```json?|```/gi, '').trim()); }
   catch (e) { /* use defaults */ }
 
-  // Parse key signature
-  let extractedKey = null;
-  try {
-    const ks = JSON.parse(keySigRaw.replace(/```json?|```/gi, '').trim());
-    const keyResult = resolveKeyFromCounts(Number(ks.flats) || 0, Number(ks.sharps) || 0, null);
-    extractedKey = keyResult.codeSaid || keyResult.key;
-    console.log(`[Solfai] Key sig extracted: ${ks.sharps || 0} sharps, ${ks.flats || 0} flats → ${extractedKey}`);
-  } catch (e) { /* key extraction failed */ }
+  // Parse and vote on key signature
+  const keyReadResults = [keySig1Raw, keySig2Raw, keySig3Raw];
+  const keySigVotes = [];
+  for (let i = 0; i < keyReadResults.length; i++) {
+    try {
+      const ks = JSON.parse(keyReadResults[i].replace(/```json?|```/gi, '').trim());
+      keySigVotes.push({
+        flats: Number(ks.flats) || 0,
+        sharps: Number(ks.sharps) || 0,
+        weight: i < 2 ? WEIGHT_PRO : WEIGHT_FLASH,
+      });
+    } catch (e) { /* skip */ }
+  }
+
+  const votedFlats = Number(weightedVote(keySigVotes.map(v => ({ value: v.flats, weight: v.weight })))) || 0;
+  const votedSharps = Number(weightedVote(keySigVotes.map(v => ({ value: v.sharps, weight: v.weight })))) || 0;
+
+  const keyResult = resolveKeyFromCounts(votedFlats, votedSharps, null);
+  const extractedKey = keyResult.codeSaid || keyResult.key;
+  console.log(`[Solfai] Key sig voted: ${keySigVotes.map(v => `${v.flats}b/${v.sharps}s`).join(', ')} → ${extractedKey}`);
 
   const clefRef = staffInfo.clef === 'bass'
     ? `BASS CLEF — Lines bottom→top: G2 B2 D3 F3 A3. Spaces: A2 C3 E3 G3.`
@@ -831,11 +1386,12 @@ Output ONLY JSON: {"sharps": N, "flats": N}`,
       ? `TREBLE-8 CLEF (all pitches one octave LOWER than treble) — Lines: E3 G3 B3 D4 F4. Spaces: F3 A3 C4 E4.`
       : `TREBLE CLEF — Lines bottom→top: E4 G4 B4 D5 F5. Spaces: F4 A4 C5 E5.
 A note ON a line: line through center of head. A note IN a space: between two lines.
-CRITICAL: 3rd line = B4, 3rd space = C5 — they look close but differ.`;
+CRITICAL: 3rd line = B4, 3rd space = C5 — they look close but differ.
+Middle C (C4) = first ledger line below staff.`;
 
-  // Key constraint for note extraction
+  const scaleNotes = extractedKey ? Scale.get(extractedKey + ' major').notes.join(', ') : '';
   const keyConstraint = extractedKey
-    ? `\nKEY SIGNATURE CONSTRAINT: This piece is in ${extractedKey}. Scale notes: ${Scale.get(extractedKey + ' major').notes.join(', ')}. Every note with a key sig accidental MUST include it unless cancelled by a natural sign (♮).`
+    ? `\nKEY SIGNATURE CONSTRAINT: This piece is in ${extractedKey}. Scale notes: ${scaleNotes}. Every note with a key sig accidental MUST include it unless cancelled by a natural sign (♮).`
     : '';
 
   const outputFormat = `Output ONLY a JSON array of measure objects. Each: {"num": 1, "notes": ["C4","D4","E4"], "lyrics": "glo-ri-a"}
@@ -847,18 +1403,28 @@ Rules:
 - Vocal range check: Soprano C4-G5, Alto G3-E5, Tenor C3-A4, Bass E2-E4
 - IGNORE watermark text completely${keyConstraint}`;
 
-  const sysBase = `You are a professional music copyist transcribing choral music.
+  const sysBase = `You are a professional music copyist transcribing choral music with extreme precision.
 Staff #${staffInfo.vocal_staff_number} from the top — ${part} vocal part.
 ${clefRef}
+
+READING PROCEDURE FOR EACH NOTE:
+1. Is the note head ON a line or IN a space?
+2. Count from the bottom: which line (1-5) or space (1-4)?
+3. Look up the pitch name from the clef reference above
+4. Check for accidentals directly before the note (♯ ♭ ♮)
+5. Apply key signature accidentals if no natural cancels them
+6. Determine octave number from staff position
+
 ${outputFormat}`;
 
-  const sysVerify = `You are double-checking a music transcription.
+  const sysVerify = `You are double-checking a music transcription with extreme care.
 Staff #${staffInfo.vocal_staff_number} from the top — ${part} vocal part.
 ${clefRef}
 Read EVERY note twice. Pay special attention to:
-- Notes near middle of staff where line/space is confusable
+- Notes near middle of staff where line/space is confusable (B4 vs C5)
 - Key signature accidentals vs natural signs
-- Octave numbers
+- Octave numbers — count ledger lines carefully
+- Tied notes (count only once) vs repeated notes
 ${outputFormat}`;
 
   function parseExtraction(raw) {
@@ -877,9 +1443,8 @@ ${outputFormat}`;
 
   // Step 2: Try image segmentation for tall images
   let segmentedMeasures = null;
-  const firstJpeg = imageParts.find(p => p.inlineData?.mimeType === 'image/jpeg');
   if (firstJpeg) {
-    const segments = await segmentImage(firstJpeg.inlineData.data, 3);
+    const segments = await segmentImage(firstJpeg.inlineData.data, 4);
     if (segments) {
       console.log(`[Solfai] Image segmented into ${segments.length} strips`);
       try {
@@ -887,10 +1452,11 @@ ${outputFormat}`;
           callGemini(apiKey, sysBase,
             [{ text: `Extract notes for ${part} from segment ${idx + 1} of ${segments.length}. JSON array only.` },
             { inlineData: { mimeType: 'image/jpeg', data: seg } }],
-            { temperature: 0, maxOutputTokens: 4096, thinkingBudget: 3000 }
+            { temperature: 0, maxOutputTokens: 4096, thinkingBudget: 4000 }
           )
         ));
         segmentedMeasures = segResults.flatMap(r => parseExtraction(r));
+        // Re-number measures sequentially
         segmentedMeasures.forEach((m, i) => { m.num = i + 1; });
       } catch (e) {
         console.warn('[Solfai] Segmented extraction failed:', e.message);
@@ -898,82 +1464,48 @@ ${outputFormat}`;
     }
   }
 
-  // Step 3: THREE extractions in PARALLEL (2x Pro + 1x Flash)
-  const [ext1Raw, ext2Raw, ext3Raw] = await Promise.all([
+  // Step 3: FIVE extractions in PARALLEL (3x Pro + 2x Flash)
+  const extractionPromises = [
+    // Pro extraction 1
     callGemini(apiKey, sysBase,
       [{ text: `Extract all notes for ${part} (staff #${staffInfo.vocal_staff_number}). JSON array only.` }, ...processedParts],
-      { temperature: 0, maxOutputTokens: 8192, thinkingBudget: 6000 }
+      { temperature: 0, maxOutputTokens: 8192, thinkingBudget: 8000 }
     ),
+    // Pro extraction 2 (verification)
     callGemini(apiKey, sysVerify,
       [{ text: `Verification pass — carefully re-read each note for ${part} (staff #${staffInfo.vocal_staff_number}). JSON array only.` }, ...processedParts],
-      { temperature: 0, maxOutputTokens: 8192, thinkingBudget: 6000 }
+      { temperature: 0, maxOutputTokens: 8192, thinkingBudget: 8000 }
     ),
+    // Pro extraction 3 (with high contrast image)
+    callGemini(apiKey, sysBase,
+      [{ text: `Third independent read: Extract all notes for ${part} (staff #${staffInfo.vocal_staff_number}). JSON array only.` },
+       ...(highContrastParts.length ? highContrastParts : processedParts)],
+      { temperature: 0, maxOutputTokens: 8192, thinkingBudget: 8000 }
+    ),
+    // Flash extraction 1
     callGemini(apiKey, sysBase,
       [{ text: `Extract all notes for ${part} (staff #${staffInfo.vocal_staff_number}). JSON array only.` }, ...processedParts],
       { model: GEMINI_FLASH, temperature: 0, maxOutputTokens: 4096, thinkingBudget: 0 }
     ),
-  ]);
+    // Flash extraction 2
+    callGemini(apiKey, sysVerify,
+      [{ text: `Verify and extract all notes for ${part} (staff #${staffInfo.vocal_staff_number}). JSON array only.` },
+       ...(highContrastParts.length ? highContrastParts : processedParts)],
+      { model: GEMINI_FLASH, temperature: 0, maxOutputTokens: 4096, thinkingBudget: 0 }
+    ),
+  ];
 
-  const measures1 = parseExtraction(ext1Raw);
-  const measures2 = parseExtraction(ext2Raw);
-  const measures3 = parseExtraction(ext3Raw);
+  const extractionResults = await Promise.all(extractionPromises);
+
+  const measureSets = extractionResults.map(r => parseExtraction(r));
+  // Include segmented results if available
+  if (segmentedMeasures?.length) measureSets.push(segmentedMeasures);
+
   const tonic = extractedKey?.split(' ')[0] || 'C';
-  console.log(`[Solfai] Extractions: Pro1=${measures1.length}m, Pro2=${measures2.length}m, Flash=${measures3.length}m, tonic=${tonic}`);
+  console.log(`[Solfai] Extractions: ${measureSets.map((s, i) => `${i < 3 ? 'Pro' : i < 5 ? 'Flash' : 'Seg'}=${s.length}m`).join(', ')}, tonic=${tonic}`);
 
-  // Step 4: Reconcile all extractions
-  const maxLen = Math.max(measures1.length, measures2.length, (segmentedMeasures || []).length);
-  const reconciledMeasures = [];
-
-  for (let i = 0; i < maxLen; i++) {
-    const m1 = measures1[i];
-    const m2 = measures2[i];
-    const m3 = segmentedMeasures?.[i];
-
-    if (!m1 && !m2 && m3) {
-      reconciledMeasures.push({ ...m3, confidence: 'low', disagreement: false });
-      continue;
-    }
-    if (!m1 && m2) {
-      reconciledMeasures.push({ ...m2, confidence: 'medium' });
-    } else if (m1 && !m2) {
-      reconciledMeasures.push({ ...m1, confidence: 'medium' });
-    } else if (m1 && m2) {
-      const n1 = (m1.notes || []).join(',').toLowerCase();
-      const n2 = (m2.notes || []).join(',').toLowerCase();
-      const n3 = m3 ? (m3.notes || []).join(',').toLowerCase() : null;
-      const agree12 = n1 === n2;
-
-      if (agree12) {
-        reconciledMeasures.push({
-          num: m1.num ?? (i + 1),
-          notes: m1.notes || [],
-          lyrics: m1.lyrics || m2.lyrics || '',
-          confidence: 'high',
-          disagreement: false,
-          alt_notes: null,
-        });
-      } else if (n3 && (n1 === n3 || n2 === n3)) {
-        const winner = n1 === n3 ? m1 : m2;
-        reconciledMeasures.push({
-          num: winner.num ?? (i + 1),
-          notes: winner.notes || [],
-          lyrics: winner.lyrics || m1.lyrics || m2.lyrics || '',
-          confidence: 'high',
-          disagreement: false,
-          alt_notes: null,
-        });
-      } else {
-        reconciledMeasures.push({
-          num: m1.num ?? (i + 1),
-          notes: m1.notes || [],
-          lyrics: m1.lyrics || m2.lyrics || '',
-          confidence: 'medium',
-          disagreement: true,
-          alt_notes: m2.notes || [],
-        });
-      }
-    }
-  }
+  // Step 4: Note-by-note reconciliation across ALL extractions
+  const reconciledMeasures = noteByNoteReconcile(measureSets, tonic, part);
 
   // Step 5: Music theory validation
   const theoryCorrections = validateAndFixNotes(reconciledMeasures, tonic, part);
@@ -991,7 +1523,8 @@ ${outputFormat}`;
   }
 
   const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-  console.log(`[Solfai] Solfege complete: ${reconciledMeasures.length} measures in ${elapsed}s`);
+  const highConfCount = reconciledMeasures.filter(m => m.confidence === 'high').length;
+  console.log(`[Solfai] Solfege complete: ${reconciledMeasures.length} measures (${highConfCount} high-conf) in ${elapsed}s`);
 
   // Build text output
   let textOutput = `Key: ${tonic} (Do = ${tonic})\nStaff: ${part} (staff #${staffInfo.vocal_staff_number} of ${staffInfo.total_staves || 1})\n\n`;
@@ -999,7 +1532,9 @@ ${outputFormat}`;
     textOutput += `m.${m.num}:\n`;
     textOutput += `  Notes:   ${(m.notes || []).join(' ')}\n`;
     textOutput += `  Solfege: ${(m.solfege || []).join(' ')}\n`;
-    textOutput += `  Lyrics:  "${m.lyrics || ''}"\n\n`;
+    textOutput += `  Lyrics:  "${m.lyrics || ''}"\n`;
+    if (m.confidence !== 'high') textOutput += `  ⚠ Confidence: ${m.confidence}\n`;
+    textOutput += '\n';
   }
 
   if (!reconciledMeasures.length) {
@@ -1016,6 +1551,8 @@ ${outputFormat}`;
       measures: reconciledMeasures,
       disagreements: reconciledMeasures.filter(m => m.disagreement).length,
       theoryCorrections,
+      extractionCount: measureSets.length,
+      highConfidenceCount: highConfCount,
     },
     text: textOutput,
   });
@@ -1023,17 +1560,17 @@ ${outputFormat}`;
 
 // ─── RHYTHM ───────────────────────────────────────────────
 async function handleRhythm(res, apiKey, imageParts, part) {
-  const processedParts = [];
-  for (const p of imageParts.slice(0, 4)) {
-    if (p.inlineData?.mimeType === 'image/jpeg') {
-      try {
-        const enhanced = await preprocessForGemini(p.inlineData.data, 'full');
-        processedParts.push({ inlineData: { mimeType: 'image/jpeg', data: enhanced } });
-      } catch (e) { processedParts.push(p); }
-    } else {
-      processedParts.push(p);
-    }
-  }
+  const processedParts = await Promise.all(
+    imageParts.slice(0, 4).map(async (p) => {
+      if (p.inlineData?.mimeType === 'image/jpeg') {
+        try {
+          const enhanced = await preprocessForGemini(p.inlineData.data, 'full');
+          return { inlineData: { mimeType: 'image/jpeg', data: enhanced } };
+        } catch (e) { return p; }
+      }
+      return p;
+    })
+  );
 
   const systemPrompt = `You are a rhythm coach helping a choir singer learn their part.
 Skip title/cover pages. IGNORE watermark text.
@@ -1411,4 +1948,4 @@ app.post('/api/manual-solfege', (req, res) => {
 });
 
 // ─── Start ────────────────────────────────────────────────
-app.listen(PORT, () => console.log(`[Solfai v9] Running on port ${PORT}`));
+app.listen(PORT, () => console.log(`[Solfai v10] Running on port ${PORT}`));
