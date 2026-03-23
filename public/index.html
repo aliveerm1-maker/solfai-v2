@@ -2651,9 +2651,12 @@ function animateDiffBars() {
 }
 
 async function callAPI(messages, mode) {
+  // When we have rendered PDF pages, skip sending the raw PDF binary to reduce payload size
+  const sendBase64 = (pdfPages.length > 0) ? null : imageBase64;
+  const sendMime = (pdfPages.length > 0) ? 'image/jpeg' : imageMime;
   const res = await fetch('/api/analyze', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ messages, imageBase64, imageMime, pdfPages, mode, selectedPart })
+    body: JSON.stringify({ messages, imageBase64: sendBase64, imageMime: sendMime, pdfPages, mode, selectedPart })
   });
   if (!res.ok) {
     const t = await res.text();

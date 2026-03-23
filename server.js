@@ -22,7 +22,7 @@ const __dirname = dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(express.json({ limit: '25mb' }));
+app.use(express.json({ limit: '50mb' }));
 app.use(express.static(join(__dirname, 'public')));
 
 // ─── Config ───────────────────────────────────────────────
@@ -1069,21 +1069,23 @@ async function segmentImage(base64Data, maxSegments = 4) {
 function buildImageParts(imageBase64, imageMime, pdfPages) {
   const parts = [];
 
-  if (imageMime === 'application/pdf' && imageBase64) {
-    parts.push({ inlineData: { mimeType: 'application/pdf', data: imageBase64 } });
-    if (pdfPages?.length > 0) {
-      for (const page of pdfPages.slice(0, 3)) {
-        parts.push({ inlineData: { mimeType: 'image/jpeg', data: page } });
-      }
+  // PDF handling: ALWAYS prefer rendered JPEG pages over raw PDF binary.
+  // Gemini handles JPEG images much more reliably than raw PDF data.
+  if (pdfPages?.length > 0) {
+    for (const page of pdfPages.slice(0, 5)) {
+      parts.push({ inlineData: { mimeType: 'image/jpeg', data: page } });
     }
     return parts;
   }
 
-  if (pdfPages?.length > 0) {
-    for (const page of pdfPages) {
-      parts.push({ inlineData: { mimeType: 'image/jpeg', data: page } });
-    }
-  } else if (imageBase64) {
+  // For PDFs without pre-rendered pages, send the raw PDF as fallback
+  if (imageMime === 'application/pdf' && imageBase64) {
+    parts.push({ inlineData: { mimeType: 'application/pdf', data: imageBase64 } });
+    return parts;
+  }
+
+  // Regular image
+  if (imageBase64) {
     parts.push({ inlineData: { mimeType: imageMime || 'image/jpeg', data: imageBase64 } });
   }
   return parts;
@@ -1197,7 +1199,9 @@ app.post('/api/analyze', async (req, res) => {
     } else if (userError.includes('401') || userError.toLowerCase().includes('api key')) {
       userError = 'API key error. Please contact support.';
     } else if (userError.toLowerCase().includes('no image') || userError.toLowerCase().includes('no response')) {
-      userError = 'Could not read the image. Try uploading a clearer photo with better lighting.';
+      userError = 'The AI could not process this image. Please try: (1) a clearer photo with good lighting, (2) a higher resolution scan, or (3) a different file format (JPG/PNG work best).';
+    } else if (userError.toLowerCase().includes('invalid') || userError.toLowerCase().includes('could not')) {
+      userError = 'Processing failed. Try re-uploading the image or using a different file.';
     }
     return res.status(500).json({ error: userError });
   }
