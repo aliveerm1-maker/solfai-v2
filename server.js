@@ -27,7 +27,7 @@ app.use(express.static(join(__dirname, 'public')));
 
 // ─── Config ───────────────────────────────────────────────
 const GEMINI_MODEL = 'gemini-2.5-pro';
-const GEMINI_FLASH = 'gemini-2.0-flash';
+const GEMINI_FLASH = 'gemini-2.5-flash';
 const BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
 const CORRECTIONS_FILE = join(__dirname, 'corrections.json');
 
