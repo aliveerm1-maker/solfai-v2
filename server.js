@@ -212,6 +212,177 @@ const KEY_FROM_COUNT = {
   '7s': { major: 'C# major', minor: 'A# minor' },
 };
 
+// ─── Choir Piece Database (known correct values) ────────
+const CHOIR_PIECE_DATABASE = [
+  // Handel
+  { title: "Hallelujah Chorus", composer: "Handel", key: "D major", time: "4/4", sopranoStart: "D5", altoStart: "A4", tenorStart: "F#4", bassStart: "D3" },
+  { title: "And the Glory of the Lord", composer: "Handel", key: "A major", time: "3/4", sopranoStart: "E5", altoStart: "A4", tenorStart: "C#4", bassStart: "A3" },
+  { title: "For Unto Us a Child Is Born", composer: "Handel", key: "G major", time: "4/4", sopranoStart: "G4", altoStart: "D4", tenorStart: "B3", bassStart: "G3" },
+  { title: "Worthy Is the Lamb", composer: "Handel", key: "D major", time: "4/4", sopranoStart: "D5", altoStart: "A4", tenorStart: "F#4", bassStart: "D3" },
+  { title: "Since by Man Came Death", composer: "Handel", key: "A minor", time: "4/4", sopranoStart: "E5", altoStart: "C5", tenorStart: "A4", bassStart: "A3" },
+  { title: "All We Like Sheep", composer: "Handel", key: "A major", time: "4/4", sopranoStart: "A4", altoStart: "E4", tenorStart: "C#4", bassStart: "A3" },
+  { title: "He Shall Feed His Flock", composer: "Handel", key: "Bb major", time: "12/8", sopranoStart: "F4", altoStart: "D4", tenorStart: "Bb3", bassStart: "F3" },
+  { title: "His Yoke Is Easy", composer: "Handel", key: "Bb major", time: "4/4", sopranoStart: "Bb4", altoStart: "F4", tenorStart: "D4", bassStart: "Bb3" },
+  { title: "O Thou That Tellest", composer: "Handel", key: "D major", time: "6/8", sopranoStart: "D5", altoStart: "A4", tenorStart: "F#4", bassStart: "D3" },
+  { title: "Surely He Hath Borne Our Griefs", composer: "Handel", key: "F minor", time: "4/4", sopranoStart: "F5", altoStart: "C5", tenorStart: "Ab4", bassStart: "F3" },
+  // Bach
+  { title: "Ave Maria", composer: "Bach/Gounod", key: "C major", time: "4/4", sopranoStart: "E4", altoStart: "C4", tenorStart: "G3", bassStart: "C3" },
+  { title: "Jesu Joy of Man's Desiring", composer: "Bach", key: "G major", time: "9/8", sopranoStart: "B4", altoStart: "G4", tenorStart: "D4", bassStart: "G3" },
+  { title: "Sheep May Safely Graze", composer: "Bach", key: "Bb major", time: "4/4", sopranoStart: "F5", altoStart: "Bb4", tenorStart: "D4", bassStart: "Bb3" },
+  { title: "O Sacred Head Now Wounded", composer: "Bach", key: "D minor", time: "4/4", sopranoStart: "D5", altoStart: "A4", tenorStart: "F4", bassStart: "D3" },
+  { title: "Wachet Auf", composer: "Bach", key: "Eb major", time: "4/4", sopranoStart: "Eb5", altoStart: "Bb4", tenorStart: "G4", bassStart: "Eb3" },
+  { title: "Komm Susser Tod", composer: "Bach", key: "Eb major", time: "3/4", sopranoStart: "Bb4", altoStart: "Eb4", tenorStart: "G3", bassStart: "Eb3" },
+  // Mozart Requiem
+  { title: "Requiem - Introitus", composer: "Mozart", key: "D minor", time: "4/4", sopranoStart: "D5", altoStart: "A4", tenorStart: "F4", bassStart: "D3" },
+  { title: "Requiem - Dies Irae", composer: "Mozart", key: "D minor", time: "4/4", sopranoStart: "D5", altoStart: "A4", tenorStart: "F4", bassStart: "D3" },
+  { title: "Requiem - Rex Tremendae", composer: "Mozart", key: "Bb major", time: "4/4", sopranoStart: "F5", altoStart: "Bb4", tenorStart: "D4", bassStart: "Bb3" },
+  { title: "Requiem - Confutatis", composer: "Mozart", key: "A minor", time: "4/4", sopranoStart: "E5", altoStart: "C5", tenorStart: "A4", bassStart: "A3" },
+  { title: "Requiem - Lacrimosa", composer: "Mozart", key: "D minor", time: "12/8", sopranoStart: "D5", altoStart: "A4", tenorStart: "F4", bassStart: "D3" },
+  { title: "Ave Verum Corpus", composer: "Mozart", key: "D major", time: "4/4", sopranoStart: "D5", altoStart: "A4", tenorStart: "F#4", bassStart: "D4" },
+  { title: "Laudate Dominum", composer: "Mozart", key: "F major", time: "6/8", sopranoStart: "F5", altoStart: "C5", tenorStart: "A4", bassStart: "F3" },
+  // Faure Requiem
+  { title: "Requiem - Introit et Kyrie", composer: "Faure", key: "D minor", time: "4/4", sopranoStart: "A4", altoStart: "F4", tenorStart: "D4", bassStart: "D3" },
+  { title: "Requiem - Sanctus", composer: "Faure", key: "Eb major", time: "3/4", sopranoStart: "Bb4", altoStart: "Eb4", tenorStart: "Bb3", bassStart: "Eb3" },
+  { title: "Requiem - Pie Jesu", composer: "Faure", key: "Bb major", time: "4/4", sopranoStart: "F5", altoStart: "Bb4", tenorStart: "D4", bassStart: "Bb3" },
+  { title: "Requiem - In Paradisum", composer: "Faure", key: "D major", time: "3/4", sopranoStart: "A4", altoStart: "F#4", tenorStart: "D4", bassStart: "A3" },
+  { title: "Cantique de Jean Racine", composer: "Faure", key: "Db major", time: "4/4", sopranoStart: "Ab4", altoStart: "F4", tenorStart: "Db4", bassStart: "Ab3" },
+  // Brahms Requiem
+  { title: "Ein Deutsches Requiem - I", composer: "Brahms", key: "F major", time: "4/4", sopranoStart: "F4", altoStart: "C4", tenorStart: "A3", bassStart: "F3" },
+  { title: "Ein Deutsches Requiem - II", composer: "Brahms", key: "Bb minor", time: "3/4", sopranoStart: "Bb4", altoStart: "F4", tenorStart: "Db4", bassStart: "Bb3" },
+  { title: "Ein Deutsches Requiem - IV", composer: "Brahms", key: "Eb major", time: "3/4", sopranoStart: "Bb4", altoStart: "Eb4", tenorStart: "Bb3", bassStart: "Eb3" },
+  { title: "How Lovely Is Thy Dwelling Place", composer: "Brahms", key: "Eb major", time: "3/4", sopranoStart: "Bb4", altoStart: "Eb4", tenorStart: "Bb3", bassStart: "Eb3" },
+  // Christmas
+  { title: "O Come All Ye Faithful", composer: "Wade", key: "G major", time: "4/4", sopranoStart: "G4", altoStart: "D4", tenorStart: "B3", bassStart: "G3" },
+  { title: "Silent Night", composer: "Gruber", key: "Bb major", time: "6/8", sopranoStart: "F4", altoStart: "D4", tenorStart: "Bb3", bassStart: "F3" },
+  { title: "Hark the Herald Angels Sing", composer: "Mendelssohn", key: "F major", time: "4/4", sopranoStart: "C5", altoStart: "A4", tenorStart: "F4", bassStart: "F3" },
+  { title: "Joy to the World", composer: "Mason", key: "D major", time: "2/4", sopranoStart: "D5", altoStart: "A4", tenorStart: "F#4", bassStart: "D3" },
+  { title: "O Holy Night", composer: "Adam", key: "C major", time: "6/8", sopranoStart: "C4", altoStart: "E4", tenorStart: "C4", bassStart: "C3" },
+  { title: "The First Noel", composer: "Traditional", key: "D major", time: "3/4", sopranoStart: "F#4", altoStart: "D4", tenorStart: "A3", bassStart: "D3" },
+  { title: "O Little Town of Bethlehem", composer: "Redner", key: "F major", time: "4/4", sopranoStart: "A4", altoStart: "F4", tenorStart: "C4", bassStart: "F3" },
+  { title: "Away in a Manger", composer: "Murray", key: "F major", time: "3/4", sopranoStart: "C5", altoStart: "A4", tenorStart: "F4", bassStart: "F3" },
+  { title: "What Child Is This", composer: "Traditional", key: "E minor", time: "3/4", sopranoStart: "E4", altoStart: "B3", tenorStart: "G3", bassStart: "E3" },
+  { title: "O Come O Come Emmanuel", composer: "Traditional", key: "E minor", time: "4/4", sopranoStart: "E4", altoStart: "B3", tenorStart: "G3", bassStart: "E3" },
+  { title: "Angels We Have Heard on High", composer: "Traditional", key: "F major", time: "4/4", sopranoStart: "F4", altoStart: "C4", tenorStart: "A3", bassStart: "F3" },
+  { title: "Carol of the Bells", composer: "Leontovych", key: "G minor", time: "3/4", sopranoStart: "D5", altoStart: "Bb4", tenorStart: "G4", bassStart: "G3" },
+  // Hymns and Anthems
+  { title: "Amazing Grace", composer: "Traditional", key: "G major", time: "3/4", sopranoStart: "D4", altoStart: "B3", tenorStart: "G3", bassStart: "G3" },
+  { title: "How Great Thou Art", composer: "Hine", key: "Bb major", time: "4/4", sopranoStart: "F4", altoStart: "D4", tenorStart: "Bb3", bassStart: "Bb3" },
+  { title: "Be Thou My Vision", composer: "Traditional Irish", key: "Eb major", time: "3/4", sopranoStart: "Eb4", altoStart: "Bb3", tenorStart: "G3", bassStart: "Eb3" },
+  { title: "Holy Holy Holy", composer: "Dykes", key: "D major", time: "4/4", sopranoStart: "D4", altoStart: "A3", tenorStart: "F#3", bassStart: "D3" },
+  { title: "For the Beauty of the Earth", composer: "Kocher", key: "Ab major", time: "4/4", sopranoStart: "Eb4", altoStart: "C4", tenorStart: "Ab3", bassStart: "Ab3" },
+  { title: "Come Thou Fount", composer: "Nettleton", key: "D major", time: "3/4", sopranoStart: "D4", altoStart: "A3", tenorStart: "F#3", bassStart: "D3" },
+  { title: "It Is Well with My Soul", composer: "Bliss", key: "C major", time: "4/4", sopranoStart: "E4", altoStart: "C4", tenorStart: "G3", bassStart: "C3" },
+  { title: "Great Is Thy Faithfulness", composer: "Runyan", key: "D major", time: "3/4", sopranoStart: "D4", altoStart: "A3", tenorStart: "F#3", bassStart: "D3" },
+  { title: "A Mighty Fortress Is Our God", composer: "Luther", key: "C major", time: "4/4", sopranoStart: "C5", altoStart: "G4", tenorStart: "E4", bassStart: "C3" },
+  // African American Spirituals
+  { title: "Swing Low Sweet Chariot", composer: "Traditional Spiritual", key: "F major", time: "4/4", sopranoStart: "C5", altoStart: "A4", tenorStart: "F4", bassStart: "F3" },
+  { title: "Deep River", composer: "Traditional Spiritual", key: "Eb major", time: "4/4", sopranoStart: "Bb4", altoStart: "Eb4", tenorStart: "G3", bassStart: "Eb3" },
+  { title: "Steal Away", composer: "Traditional Spiritual", key: "Ab major", time: "4/4", sopranoStart: "Eb5", altoStart: "Ab4", tenorStart: "C4", bassStart: "Ab3" },
+  { title: "Go Down Moses", composer: "Traditional Spiritual", key: "E minor", time: "4/4", sopranoStart: "E4", altoStart: "B3", tenorStart: "G3", bassStart: "E3" },
+  { title: "Wade in the Water", composer: "Traditional Spiritual", key: "D minor", time: "4/4", sopranoStart: "D5", altoStart: "A4", tenorStart: "F4", bassStart: "D3" },
+  { title: "Elijah Rock", composer: "Hairston", key: "G minor", time: "4/4", sopranoStart: "D5", altoStart: "Bb4", tenorStart: "G4", bassStart: "G3" },
+  { title: "There Is a Balm in Gilead", composer: "Traditional Spiritual", key: "F major", time: "4/4", sopranoStart: "A4", altoStart: "F4", tenorStart: "C4", bassStart: "F3" },
+  { title: "Every Time I Feel the Spirit", composer: "Traditional Spiritual", key: "G major", time: "4/4", sopranoStart: "D5", altoStart: "B4", tenorStart: "G4", bassStart: "G3" },
+  { title: "Joshua Fit the Battle of Jericho", composer: "Traditional Spiritual", key: "D minor", time: "2/4", sopranoStart: "A4", altoStart: "F4", tenorStart: "D4", bassStart: "D3" },
+  { title: "Ain't Got Time to Die", composer: "Johnson", key: "Ab major", time: "4/4", sopranoStart: "Eb5", altoStart: "C5", tenorStart: "Ab4", bassStart: "Ab3" },
+  { title: "Ride On King Jesus", composer: "Hairston", key: "Eb major", time: "4/4", sopranoStart: "Bb4", altoStart: "G4", tenorStart: "Eb4", bassStart: "Eb3" },
+  { title: "Soon I Will Be Done", composer: "Dawson", key: "C minor", time: "4/4", sopranoStart: "G4", altoStart: "Eb4", tenorStart: "C4", bassStart: "C3" },
+  // Classical Choral Works
+  { title: "Gloria", composer: "Vivaldi", key: "D major", time: "4/4", sopranoStart: "D5", altoStart: "A4", tenorStart: "F#4", bassStart: "D3" },
+  { title: "Dixit Dominus", composer: "Handel", key: "G minor", time: "4/4", sopranoStart: "D5", altoStart: "Bb4", tenorStart: "G4", bassStart: "G3" },
+  { title: "Zadok the Priest", composer: "Handel", key: "D major", time: "4/4", sopranoStart: "D5", altoStart: "A4", tenorStart: "F#4", bassStart: "D3" },
+  { title: "Requiem - Dies Irae", composer: "Verdi", key: "G minor", time: "4/4", sopranoStart: "G5", altoStart: "D5", tenorStart: "Bb4", bassStart: "G3" },
+  { title: "Requiem - Sanctus", composer: "Verdi", key: "F major", time: "4/4", sopranoStart: "F5", altoStart: "C5", tenorStart: "A4", bassStart: "F3" },
+  { title: "Missa Solemnis - Kyrie", composer: "Beethoven", key: "D major", time: "4/4", sopranoStart: "D5", altoStart: "A4", tenorStart: "F#4", bassStart: "D3" },
+  { title: "Ode to Joy", composer: "Beethoven", key: "D major", time: "4/4", sopranoStart: "F#4", altoStart: "D4", tenorStart: "A3", bassStart: "D3" },
+  { title: "Carmina Burana - O Fortuna", composer: "Orff", key: "D minor", time: "3/4", sopranoStart: "D5", altoStart: "A4", tenorStart: "F4", bassStart: "D3" },
+  { title: "Chichester Psalms - I", composer: "Bernstein", key: "G major", time: "7/4", sopranoStart: "D5", altoStart: "B4", tenorStart: "G4", bassStart: "G3" },
+  { title: "Locus Iste", composer: "Bruckner", key: "C major", time: "4/4", sopranoStart: "E4", altoStart: "C4", tenorStart: "G3", bassStart: "C3" },
+  { title: "Os Justi", composer: "Bruckner", key: "F major", time: "4/4", sopranoStart: "C5", altoStart: "A4", tenorStart: "F4", bassStart: "C3" },
+  { title: "The Armed Man - Kyrie", composer: "Jenkins", key: "D minor", time: "4/4", sopranoStart: "D5", altoStart: "A4", tenorStart: "F4", bassStart: "D3" },
+  { title: "Spem in Alium", composer: "Tallis", key: "A major", time: "4/4", sopranoStart: "A4", altoStart: "E4", tenorStart: "C#4", bassStart: "A3" },
+  // Madrigals
+  { title: "April Is in My Mistress' Face", composer: "Morley", key: "G major", time: "4/4", sopranoStart: "G4", altoStart: "D4", tenorStart: "B3", bassStart: "G3" },
+  { title: "Now Is the Month of Maying", composer: "Morley", key: "G major", time: "4/4", sopranoStart: "D5", altoStart: "B4", tenorStart: "G4", bassStart: "G3" },
+  { title: "The Silver Swan", composer: "Gibbons", key: "G major", time: "4/4", sopranoStart: "G4", altoStart: "D4", tenorStart: "B3", bassStart: "G3" },
+  { title: "Since Robin Hood", composer: "Weelkes", key: "G major", time: "4/4", sopranoStart: "G4", altoStart: "D4", tenorStart: "B3", bassStart: "G3" },
+  { title: "Fair Phyllis", composer: "Farmer", key: "G major", time: "4/4", sopranoStart: "G4", altoStart: "D4", tenorStart: "B3", bassStart: "G3" },
+  // Romantic/Modern Choral
+  { title: "Lux Aurumque", composer: "Whitacre", key: "Ab major", time: "4/4", sopranoStart: "Ab4", altoStart: "Eb4", tenorStart: "C4", bassStart: "Ab3" },
+  { title: "Sleep", composer: "Whitacre", key: "Eb major", time: "4/4", sopranoStart: "Bb4", altoStart: "G4", tenorStart: "Eb4", bassStart: "Bb3" },
+  { title: "Seal Lullaby", composer: "Whitacre", key: "Eb major", time: "6/8", sopranoStart: "Bb4", altoStart: "G4", tenorStart: "Eb4", bassStart: "Bb3" },
+  { title: "Sure on This Shining Night", composer: "Lauridsen", key: "F major", time: "4/4", sopranoStart: "C5", altoStart: "A4", tenorStart: "F4", bassStart: "C3" },
+  { title: "O Magnum Mysterium", composer: "Lauridsen", key: "D major", time: "4/4", sopranoStart: "F#4", altoStart: "D4", tenorStart: "A3", bassStart: "D3" },
+  { title: "Dirait-on", composer: "Lauridsen", key: "Bb major", time: "6/8", sopranoStart: "F5", altoStart: "D5", tenorStart: "Bb4", bassStart: "F3" },
+  { title: "Totus Tuus", composer: "Gorecki", key: "Ab major", time: "4/4", sopranoStart: "Ab4", altoStart: "Eb4", tenorStart: "C4", bassStart: "Ab3" },
+  { title: "Ave Maria", composer: "Biebl", key: "F major", time: "4/4", sopranoStart: "F5", altoStart: "C5", tenorStart: "A4", bassStart: "F3" },
+  { title: "Prayer of the Children", composer: "Bestor", key: "Ab major", time: "4/4", sopranoStart: "Eb5", altoStart: "C5", tenorStart: "Ab4", bassStart: "Ab3" },
+  { title: "In the Bleak Midwinter", composer: "Holst", key: "F major", time: "4/4", sopranoStart: "C5", altoStart: "A4", tenorStart: "F4", bassStart: "F3" },
+  { title: "I Vow to Thee My Country", composer: "Holst", key: "Ab major", time: "3/4", sopranoStart: "Eb5", altoStart: "C5", tenorStart: "Ab4", bassStart: "Ab3" },
+  { title: "Faire Is the Heaven", composer: "Harris", key: "Eb major", time: "4/4", sopranoStart: "Bb4", altoStart: "G4", tenorStart: "Eb4", bassStart: "Bb3" },
+  { title: "Like as the Hart", composer: "Howells", key: "G major", time: "4/4", sopranoStart: "D5", altoStart: "B4", tenorStart: "G4", bassStart: "G3" },
+  // Faure/Durufle/Rutter
+  { title: "Requiem - Pie Jesu", composer: "Rutter", key: "Bb major", time: "4/4", sopranoStart: "F5", altoStart: "D5", tenorStart: "Bb4", bassStart: "F3" },
+  { title: "For the Beauty of the Earth", composer: "Rutter", key: "C major", time: "4/4", sopranoStart: "E4", altoStart: "C4", tenorStart: "G3", bassStart: "C3" },
+  { title: "The Lord Bless You and Keep You", composer: "Rutter", key: "Eb major", time: "4/4", sopranoStart: "Bb4", altoStart: "G4", tenorStart: "Eb4", bassStart: "Bb3" },
+  { title: "Look at the World", composer: "Rutter", key: "D major", time: "4/4", sopranoStart: "D5", altoStart: "A4", tenorStart: "F#4", bassStart: "D3" },
+  { title: "Requiem - Introit", composer: "Durufle", key: "D minor", time: "4/4", sopranoStart: "D5", altoStart: "A4", tenorStart: "F4", bassStart: "D3" },
+  { title: "Ubi Caritas", composer: "Durufle", key: "F major", time: "4/4", sopranoStart: "C5", altoStart: "A4", tenorStart: "F4", bassStart: "C3" },
+  // Opera choruses / Oratorio
+  { title: "Va Pensiero", composer: "Verdi", key: "F# minor", time: "4/4", sopranoStart: "C#5", altoStart: "A4", tenorStart: "F#4", bassStart: "F#3" },
+  { title: "Anvil Chorus", composer: "Verdi", key: "C major", time: "4/4", sopranoStart: "E5", altoStart: "C5", tenorStart: "G4", bassStart: "C3" },
+  { title: "Elijah - And Then Shall Your Light Break Forth", composer: "Mendelssohn", key: "F major", time: "4/4", sopranoStart: "F5", altoStart: "C5", tenorStart: "A4", bassStart: "F3" },
+  { title: "Elijah - He Watching Over Israel", composer: "Mendelssohn", key: "F major", time: "6/8", sopranoStart: "C5", altoStart: "A4", tenorStart: "F4", bassStart: "F3" },
+  // Contemporary/Pop-influenced
+  { title: "Bohemian Rhapsody", composer: "Mercury/arr.", key: "Bb major", time: "4/4", sopranoStart: "Bb4", altoStart: "F4", tenorStart: "D4", bassStart: "Bb3" },
+  { title: "Africa", composer: "Toto/arr.", key: "A major", time: "4/4", sopranoStart: "A4", altoStart: "E4", tenorStart: "C#4", bassStart: "A3" },
+  { title: "Loch Lomond", composer: "Traditional Scottish", key: "F major", time: "4/4", sopranoStart: "C5", altoStart: "A4", tenorStart: "F4", bassStart: "F3" },
+  { title: "Danny Boy", composer: "Traditional Irish", key: "Eb major", time: "4/4", sopranoStart: "Eb4", altoStart: "Bb3", tenorStart: "G3", bassStart: "Eb3" },
+  { title: "Shenandoah", composer: "Traditional American", key: "F major", time: "4/4", sopranoStart: "C5", altoStart: "A4", tenorStart: "F4", bassStart: "F3" },
+  { title: "Battle Hymn of the Republic", composer: "Steffe", key: "Bb major", time: "4/4", sopranoStart: "F4", altoStart: "D4", tenorStart: "Bb3", bassStart: "Bb3" },
+];
+
+function lookupPiece(title, composer) {
+  if (!title || title === 'unknown') return null;
+  const normalize = (s) => (s || '').toLowerCase().replace(/[^a-z0-9 ]/g, '').trim();
+  const normTitle = normalize(title);
+  const normComposer = normalize(composer);
+
+  // Exact title match first
+  for (const piece of CHOIR_PIECE_DATABASE) {
+    if (normalize(piece.title) === normTitle) {
+      if (!normComposer || normalize(piece.composer).includes(normComposer) || normComposer.includes(normalize(piece.composer))) {
+        return piece;
+      }
+    }
+  }
+
+  // Fuzzy title match: check if significant words overlap
+  const titleWords = normTitle.split(/\s+/).filter(w => w.length > 2);
+  let bestMatch = null;
+  let bestScore = 0;
+
+  for (const piece of CHOIR_PIECE_DATABASE) {
+    const pieceWords = normalize(piece.title).split(/\s+/).filter(w => w.length > 2);
+    const matchingWords = titleWords.filter(w => pieceWords.some(pw => pw.includes(w) || w.includes(pw)));
+    const score = matchingWords.length / Math.max(titleWords.length, pieceWords.length);
+
+    // Boost score if composer matches
+    let composerBoost = 0;
+    if (normComposer && normalize(piece.composer).includes(normComposer)) {
+      composerBoost = 0.3;
+    }
+
+    const finalScore = score + composerBoost;
+    if (finalScore > bestScore && finalScore >= 0.5) {
+      bestScore = finalScore;
+      bestMatch = piece;
+    }
+  }
+
+  return bestMatch;
+}
+
 function resolveKeyFromCounts(flatCount, sharpCount, geminiKey) {
   let code;
   if (sharpCount > 0) code = `${sharpCount}s`;
@@ -327,6 +498,26 @@ function noteToSolfege(noteName, tonicName) {
   const interval = ((ns - ts) % 12 + 12) % 12;
   const map = { 0: 'Do', 2: 'Re', 4: 'Mi', 5: 'Fa', 7: 'Sol', 9: 'La', 11: 'Ti', 1: 'Di', 3: 'Me', 6: 'Fi', 8: 'Si', 10: 'Te' };
   return map[interval] || noteName;
+}
+
+// ─── Interval and Scale Degree Helpers ────────────────────
+function getIntervalName(note1, note2) {
+  const midi1 = Note.midi(note1);
+  const midi2 = Note.midi(note2);
+  if (midi1 === null || midi2 === null) return null;
+  const semitones = midi2 - midi1;
+  const direction = semitones > 0 ? 'up' : semitones < 0 ? 'down' : '';
+  const abs = Math.abs(semitones);
+  const names = { 0:'P1', 1:'m2', 2:'M2', 3:'m3', 4:'M3', 5:'P4', 6:'TT', 7:'P5', 8:'m6', 9:'M6', 10:'m7', 11:'M7', 12:'P8' };
+  const name = names[abs] || (abs > 12 ? names[abs % 12] + ' (compound)' : `${abs} semitones`);
+  return direction ? `${name} ${direction}` : 'unison';
+}
+
+function noteToScaleDegree(noteName, tonicName) {
+  if (!noteName || !tonicName) return null;
+  const solfege = noteToSolfege(noteName, tonicName);
+  const map = { 'Do':1, 'Re':2, 'Mi':3, 'Fa':4, 'Sol':5, 'La':6, 'Ti':7, 'Di':'#1', 'Me':'b3', 'Fi':'#4', 'Si':'#5', 'Te':'b7' };
+  return map[solfege] || null;
 }
 
 // ─── Note-by-Note Reconciliation ──────────────────────────
@@ -1135,12 +1326,49 @@ For SATB: Soprano=top treble staff stems up, Alto=bottom treble stems down, Teno
   const keyResult = resolveKeyFromCounts(finalFlats, finalSharps, geminiKeyVote);
 
   // Apply cached corrections
-  const finalKey = cached?.keySignature || keyResult.key;
-  const tonic = finalKey.split(' ')[0];
+  let finalKey = cached?.keySignature || keyResult.key;
+  let tonic = finalKey.split(' ')[0];
+
+  // ═══ DATABASE LOOKUP — validate/override AI values ═══
+  const pieceTitle = raw.piece_title || 'unknown';
+  const composerName = raw.composer_name || 'unknown';
+  const dbMatch = lookupPiece(pieceTitle, composerName);
+  let dbOverrideApplied = false;
+
+  if (dbMatch) {
+    console.log(`[Solfai] Database match: "${dbMatch.title}" by ${dbMatch.composer}`);
+
+    // Override key if AI disagrees with database
+    const dbKeyNorm = dbMatch.key.toLowerCase().replace(/\s+/g, '');
+    const aiKeyNorm = finalKey.toLowerCase().replace(/\s+/g, '').replace(/\(.*\)/, '').trim();
+    if (dbKeyNorm !== aiKeyNorm && !cached?.keySignature) {
+      console.log(`[Solfai] DB override: key "${finalKey}" → "${dbMatch.key}"`);
+      finalKey = dbMatch.key;
+      tonic = finalKey.split(' ')[0];
+      dbOverrideApplied = true;
+    }
+  }
 
   // Validate starting pitch against key and range
   const validatedPitch = validateStartingPitch(votedPitch, tonic, part);
-  const finalPitch = cached?.startingPitch || validatedPitch;
+  let finalPitch = cached?.startingPitch || validatedPitch;
+
+  // Override starting pitch from database if available
+  if (dbMatch && !cached?.startingPitch) {
+    const partKey = part.toLowerCase() + 'Start';
+    const dbPitch = dbMatch[partKey] || dbMatch.sopranoStart;
+    if (dbPitch && !areEnharmonic(dbPitch, finalPitch)) {
+      console.log(`[Solfai] DB override: ${part} starting pitch "${finalPitch}" → "${dbPitch}"`);
+      finalPitch = dbPitch;
+      dbOverrideApplied = true;
+    }
+  }
+
+  // ═══ CROSS-VALIDATE starting pitch scale degree ═══
+  const startDegree = noteToScaleDegree(finalPitch.replace(/\d+$/, ''), tonic);
+  if (startDegree !== null && ![1, 3, 5].includes(startDegree)) {
+    console.warn(`[Solfai] Warning: starting pitch ${finalPitch} is scale degree ${startDegree} in ${tonic} — not Do(1), Mi(3), or Sol(5). Verify manually.`);
+  }
 
   // Consensus on other fields
   const votedTime = weightedVote(
@@ -1260,6 +1488,7 @@ Output ONLY valid JSON.`;
       totalKeyReads: allKeyVotes.length,
       totalPitchReads: pitchVotes.length,
     },
+    _dbMatch: dbMatch ? { title: dbMatch.title, composer: dbMatch.composer, overrideApplied: dbOverrideApplied } : null,
   };
 
   return res.status(200).json({ structured, text: buildTextSummary(structured, part) });
@@ -1394,8 +1623,12 @@ Middle C (C4) = first ledger line below staff.`;
     ? `\nKEY SIGNATURE CONSTRAINT: This piece is in ${extractedKey}. Scale notes: ${scaleNotes}. Every note with a key sig accidental MUST include it unless cancelled by a natural sign (♮).`
     : '';
 
-  const outputFormat = `Output ONLY a JSON array of measure objects. Each: {"num": 1, "notes": ["C4","D4","E4"], "lyrics": "glo-ri-a"}
+  const outputFormat = `Output ONLY a JSON array of measure objects. Each: {"num": 1, "notes": ["C4","D4","E4"], "lyrics": "glo-ri-a", "pickup": false, "repeatStart": false, "repeatEnd": false, "keyChange": null}
 Rules:
+- If measure 1 has fewer beats than the time signature indicates, mark it as "pickup": true (anacrusis)
+- Note any repeat signs: set "repeatStart": true if measure begins with ||: and "repeatEnd": true if measure ends with :||
+- If D.C., D.S., or coda symbols appear, include "direction": "D.C." / "D.S." / "coda" on that measure
+- If the key signature changes mid-piece, set "keyChange": "new key name" on the measure where it changes
 - Include accidentals: Bb4, F#4, Eb5
 - Key signature accidentals apply to ALL notes of that pitch class unless cancelled by natural
 - Use [?] for unreadable notes
@@ -1513,12 +1746,19 @@ ${outputFormat}`;
     console.log(`[Solfai] Theory validation corrected ${theoryCorrections} notes`);
   }
 
-  // Step 6: Code-calculate solfege
+  // Step 6: Code-calculate solfege, scale degrees, and intervals
   const VALID_SOLFEGE = new Set(['Do', 'Di', 'Re', 'Ri', 'Me', 'Mi', 'Fa', 'Fi', 'Sol', 'Si', 'La', 'Li', 'Te', 'Ti', '?']);
   for (const m of reconciledMeasures) {
     m.solfege = (m.notes || []).map(n =>
       n === '[?]' ? '?' : noteToSolfege(n.replace(/\d+$/, ''), tonic)
     );
+    m.scaleDegrees = (m.notes || []).map(n =>
+      n === '[?]' ? null : noteToScaleDegree(n.replace(/\d+$/, ''), tonic)
+    );
+    m.intervals = (m.notes || []).map((n, i, arr) => {
+      if (i === 0 || n === '[?]' || arr[i - 1] === '[?]') return null;
+      return getIntervalName(arr[i - 1], n);
+    });
     m.valid = m.solfege.every(s => VALID_SOLFEGE.has(s));
   }
 
@@ -1945,6 +2185,33 @@ app.post('/api/manual-solfege', (req, res) => {
       `m.${m.num}:\n  Notes:   ${m.notes.join(' ')}\n  Solfege: ${m.solfege.join(' ')}`
     ).join('\n\n'),
   });
+});
+
+// ─── Transposition Endpoint ───────────────────────────────
+app.post('/api/transpose', (req, res) => {
+  const { measures, fromKey, toKey } = req.body;
+  if (!measures || !fromKey || !toKey) return res.status(400).json({ error: 'Missing data' });
+
+  const fromTonic = fromKey.replace(/\s*(major|minor)/i, '').trim();
+  const toTonic = toKey.replace(/\s*(major|minor)/i, '').trim();
+  const fromMidi = Note.midi(fromTonic + '4');
+  const toMidi = Note.midi(toTonic + '4');
+  if (fromMidi === null || toMidi === null) return res.status(400).json({ error: 'Invalid key' });
+
+  const interval = toMidi - fromMidi;
+  const transposed = measures.map(m => ({
+    ...m,
+    notes: (m.notes || []).map(n => {
+      const midi = Note.midi(n);
+      if (midi === null) return n;
+      return Note.fromMidi(midi + interval);
+    }),
+    solfege: (m.notes || []).map(n => noteToSolfege(n.replace(/\d+$/, ''), toTonic)),
+    scaleDegrees: (m.notes || []).map(n => noteToScaleDegree(n.replace(/\d+$/, ''), toTonic)),
+  }));
+
+  console.log(`[Solfai] Transposed ${measures.length} measures from ${fromKey} to ${toKey}`);
+  return res.json({ measures: transposed, key: toTonic, tonic: toTonic });
 });
 
 // ─── Start ────────────────────────────────────────────────

@@ -5,6 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Solfai – AI Sheet Music Coach</title>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230d0d1a'/%3E%3Cpath d='M17 5 C17 5 20 7 20 10 C20 13 17 14 15 13 C13 12 12 10 13 8 C14 6 16 6 17 5 Z' fill='none' stroke='%23d4a853' stroke-width='1.4' stroke-linecap='round'/%3E%3Cpath d='M17 5 L17 22' stroke='%23d4a853' stroke-width='1.4' stroke-linecap='round'/%3E%3Cellipse cx='15' cy='23' rx='3' ry='2' transform='rotate(-15 15 23)' fill='%23d4a853'/%3E%3Cpath d='M17 18 C19 17 21 18 21 20' fill='none' stroke='%23d4a853' stroke-width='1.2' stroke-linecap='round'/%3E%3Cpath d='M17 15 C19 14 22 15 22 17' fill='none' stroke='%23d4a853' stroke-width='1.2' stroke-linecap='round'/%3E%3C/svg%3E"/>
+  <link rel="manifest" href="data:application/json;base64,eyJuYW1lIjoiU29sZmFpIiwic2hvcnRfbmFtZSI6IlNvbGZhaSIsInN0YXJ0X3VybCI6Ii8iLCJkaXNwbGF5Ijoic3RhbmRhbG9uZSIsImJhY2tncm91bmRfY29sb3IiOiIjMDYwNjBlIiwidGhlbWVfY29sb3IiOiIjZDRhODUzIiwiaWNvbnMiOlt7InNyYyI6ImRhdGE6aW1hZ2Uvc3ZnK3htbCwlM0NzdmcgeG1sbnM9J2h0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnJyB2aWV3Qm94PScwIDAgMzIgMzInJTNFJTNDcmVjdCB3aWR0aD0nMzInIGhlaWdodD0nMzInIHJ4PSc3JyBmaWxsPSclMjMwZDBkMWEnLyUzRSUzQy9zdmclM0UiLCJzaXplcyI6IjMyeDMyIiwidHlwZSI6ImltYWdlL3N2Zyt4bWwifV19"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="theme-color" content="#d4a853"/>
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&display=swap" rel="stylesheet"/>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script>pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
@@ -720,6 +724,31 @@
       .section-title { font-size: 1.8rem; }
     }
 
+    /* ═══ TOAST NOTIFICATIONS ═══ */
+    .toast-container { position: fixed; bottom: 80px; right: 24px; z-index: 5000; display: flex; flex-direction: column; gap: 8px; }
+    .toast { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 12px 20px; font-size: 0.82rem; color: var(--text); box-shadow: 0 8px 32px rgba(0,0,0,0.3); animation: fadeUp 0.3s var(--transition); max-width: 320px; display: flex; align-items: center; gap: 10px; transition: opacity 0.3s, transform 0.3s; }
+    .toast.success { border-color: rgba(82,183,136,0.3); }
+    .toast.error { border-color: rgba(212,92,92,0.3); }
+
+    /* ═══ ONBOARDING ═══ */
+    .onboarding-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 3000; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(12px); animation: fadeUp 0.4s var(--transition); }
+    .onboarding-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-xl); padding: 48px 44px; max-width: 480px; width: 90%; text-align: center; box-shadow: 0 24px 80px rgba(0,0,0,0.5); }
+    .onboarding-step-dots { display: flex; gap: 8px; justify-content: center; margin-top: 24px; }
+    .onboarding-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); transition: background 0.3s; }
+    .onboarding-dot.active { background: var(--gold); }
+
+    /* ═══ SKELETON LOADING ═══ */
+    .skeleton { background: linear-gradient(90deg, var(--card) 25%, var(--card2) 50%, var(--card) 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: var(--radius-md); }
+    @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+    .skeleton-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(155px, 1fr)); gap: 10px; margin-bottom: 24px; }
+    .skeleton-card { height: 80px; }
+    .skeleton-bar { height: 16px; margin-bottom: 10px; }
+    .skeleton-block { height: 200px; }
+
+    /* ═══ PRACTICE FULLSCREEN ═══ */
+    .practice-fullscreen { position: fixed; inset: 0; background: var(--bg); z-index: 1500; display: flex; align-items: center; justify-content: center; animation: fadeUp 0.3s var(--transition); }
+    .practice-fullscreen .practice-card { max-width: 600px; width: 90%; display: block; }
+
     @media print {
       .sidebar, .blob, body::before, body::after, .chat-container, .upload-zone, .part-selector,
       .side-panel, .overlay, footer, .cheatsheet-panel, .shortcuts-overlay, .top-bar { display: none !important; }
@@ -845,6 +874,10 @@
       <span class="sidebar-item-icon">&#x2328;</span>
       <span class="sidebar-item-label">Shortcuts</span>
     </div>
+    <div class="sidebar-item" onclick="cycleFontSize()">
+      <span class="sidebar-item-icon">Aa</span>
+      <span class="sidebar-item-label" id="fontSizeLabel">Normal</span>
+    </div>
     <div class="sidebar-item" onclick="toggleTheme()" id="themeToggle">
       <span class="sidebar-item-icon" id="themeIcon">&#x1F319;</span>
       <span class="sidebar-item-label" id="themeLabel">Dark Mode</span>
@@ -882,7 +915,7 @@
     </div>
 
     <div class="upload-zone" id="uploadZone">
-      <input type="file" id="fileInput" accept="image/*,.pdf,.musicxml,.mxl,.xml"/>
+      <input type="file" id="fileInput" accept="image/*,.pdf,.musicxml,.mxl,.xml" capture="environment"/>
       <span class="upload-icon">&#x1F3BC;</span>
       <div class="upload-title">Drop your sheet music here</div>
       <div class="upload-sub">or click to browse &middot; JPG, PNG, PDF, MusicXML supported</div>
@@ -898,6 +931,17 @@
       <div class="spinner"></div>
       <div>Solfai is reading your music...</div>
       <div class="loading-sub" id="loadingSub">Step 1 of 2: Extracting key, time, pitch &amp; notes...</div>
+      <div style="margin-top:28px;">
+        <div class="skeleton-grid">
+          <div class="skeleton skeleton-card"></div>
+          <div class="skeleton skeleton-card"></div>
+          <div class="skeleton skeleton-card"></div>
+          <div class="skeleton skeleton-card"></div>
+          <div class="skeleton skeleton-card"></div>
+        </div>
+        <div class="skeleton skeleton-bar" style="width:60%;margin-bottom:16px;"></div>
+        <div class="skeleton skeleton-block"></div>
+      </div>
     </div>
 
     <div class="results" id="results">
@@ -941,6 +985,12 @@
         <div class="content-box gold-border" id="breakdownBox"></div>
       </div>
       <div id="tab-solfege" class="tab-content">
+        <div id="solfegeSystemToggle" style="display:flex;gap:8px;margin-bottom:18px;align-items:center;">
+          <span style="font-size:0.72rem;color:var(--text2);text-transform:uppercase;letter-spacing:2px;font-weight:500;">System:</span>
+          <button class="part-btn active" id="movableDoBtn" onclick="setSolfegeSystem('movable')">Movable Do</button>
+          <button class="part-btn" id="fixedDoBtn" onclick="setSolfegeSystem('fixed')">Fixed Do</button>
+          <button class="part-btn" id="degreesBtn" onclick="setSolfegeSystem('degrees')">Scale Degrees</button>
+        </div>
         <button class="mode-btn" id="solfegeBtn" onclick="loadSolfege()">Generate Solfege for my part</button>
         <div class="mode-loading" id="solfegeLoading"><div class="mini-spinner"></div> Generating solfege...</div>
         <div class="mode-output" id="solfegeOutput" style="white-space:normal;"></div>
@@ -1031,6 +1081,17 @@
       </div>
       <div class="progress-bar-track"><div class="progress-bar-fill" id="practiceProgressFill" style="width:0%"></div></div>
     </div>
+    <div id="speedControl" style="display:none;align-items:center;gap:12px;margin-bottom:18px;">
+      <span style="font-size:0.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:2px;">Speed:</span>
+      <input type="range" id="speedSlider" min="25" max="150" value="100" style="flex:1;accent-color:var(--gold);" oninput="$('speedLabel').textContent=this.value+'%'">
+      <span id="speedLabel" style="font-size:0.82rem;color:var(--gold);font-weight:600;min-width:40px;">100%</span>
+    </div>
+    <div id="practiceStreakCounter" style="display:none;background:var(--card);border-radius:var(--radius-md);padding:14px 18px;margin-bottom:18px;box-shadow:var(--shadow-card);display:none;">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <span style="font-size:0.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:2px;">Total Sessions</span>
+        <span id="totalSessionsCount" style="font-family:'Cormorant Garamond',serif;font-size:1.3rem;font-weight:700;color:var(--gold);">0</span>
+      </div>
+    </div>
     <div class="practice-card" id="practiceCard">
       <div style="font-size:0.65rem;text-transform:uppercase;letter-spacing:3px;color:var(--muted);margin-bottom:14px;font-weight:500;" id="practiceMeasureNum">Measure 1</div>
       <div class="practice-solfege" id="practiceSolfegeDisplay">Do Re Mi</div>
@@ -1040,6 +1101,11 @@
         <button class="btn-secondary" id="btnPrevMeasure" onclick="prevMeasure()">&#8592; Prev</button>
         <button class="pitch-play-btn" onclick="playCurrentMeasure()">Play Notes</button>
         <button class="btn-success" id="btnNextMeasure" onclick="nextMeasure()">Next &#8594;</button>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:center;margin-top:18px;flex-wrap:wrap;">
+        <button class="btn-secondary" onclick="toggleLoop()" id="btnLoop">&#x1F501; Loop</button>
+        <button class="btn-secondary" onclick="toggleMetronome()" id="btnMetronome">&#x1F941; Metronome</button>
+        <button class="btn-secondary" onclick="togglePracticeFullscreen()" id="btnPracticeFS">&#x26F6; Fullscreen</button>
       </div>
     </div>
   </section>
@@ -1102,6 +1168,8 @@
       <button class="btn-violet" id="btnPitchDetect" onclick="togglePitchDetection()">
         <span id="micBtnIcon">&#x1F3A4;</span> <span id="micBtnText">Start Listening</span>
       </button>
+      <button class="btn-secondary" onclick="toggleDrone()">&#x1F3B5; Drone</button>
+      <button class="btn-secondary" onclick="playTuningRef()">A440 Reference</button>
       <div id="pitchTargetDisplay" style="display:none;background:var(--card);border-radius:var(--radius-md);padding:14px 22px;box-shadow:var(--shadow-card);">
         <div style="font-size:0.65rem;text-transform:uppercase;letter-spacing:2px;color:var(--muted);font-weight:500;">Target</div>
         <div style="font-family:'Cormorant Garamond',serif;font-size:1.8rem;font-weight:700;color:var(--gold)" id="pitchTargetNote">&mdash;</div>
@@ -1147,6 +1215,8 @@
 
 <footer>Built with &#9834; by <span>Solfai</span> &middot; Powered by Gemini AI</footer>
 
+<div class="toast-container" id="toastContainer"></div>
+
 <script>
 // ═══════════════════════════════════════════════════════════════
 // STATE
@@ -1155,6 +1225,12 @@ let imageBase64 = null, imageMime = null, pdfPages = [], chatHistory = [];
 let selectedPart = 'Soprano', currentAnalysis = null, musicxmlFile = null;
 let _solfegeStructured = null, practiceData = [], practiceIndex = 0, practiceStreak = 0;
 let currentOscillator = [];
+let solfegeSystem = localStorage.getItem('solfai-solfege-system') || 'movable';
+let loopActive = false, loopStart = 0, loopEnd = 0;
+let metronomeActive = false, metronomeTid = null;
+let droneOsc = null, droneCtx = null;
+let practiceFullscreen = false;
+let totalPracticeSessions = parseInt(localStorage.getItem('solfai-practice-sessions') || '0');
 
 const $ = id => document.getElementById(id);
 
@@ -1620,6 +1696,7 @@ async function loadSolfege() {
       out.innerHTML = renderSolfegeStructured(data.structured);
       practiceData = data.structured.measures.map(m => ({ num: String(m.num), notes: m.notes || [], solfege: m.solfege || [], lyrics: m.lyrics || '', confidence: m.confidence || 'medium', disagreement: m.disagreement || false }));
       enablePracticeMode();
+      showToast(`Solfege loaded: ${data.structured.measures.length} measures`, 'success');
     } else if (data.text) {
       out.innerHTML = `<pre style="white-space:pre-wrap;">${esc(data.text)}</pre>`;
     }
@@ -1629,6 +1706,44 @@ async function loadSolfege() {
     $('solfegeOutput').textContent = 'Error: ' + err.message;
     $('solfegeOutput').classList.add('show');
   }
+}
+
+const KODALY_COLORS = { Do:'#e63946', Re:'#f4845f', Mi:'#f8c522', Fa:'#2d6a4f', Sol:'#457b9d', La:'#7b2d8b', Ti:'#e07ab1' };
+function getKodalyColor(syl) {
+  if (!syl || syl === '?') return 'var(--error)';
+  const base = syl.replace(/[#b♯♭]/g, '').trim();
+  const cap = base.charAt(0).toUpperCase() + base.slice(1).toLowerCase();
+  return KODALY_COLORS[cap] || '#888';
+}
+
+function getIntervalLabel(n1, n2) {
+  if (!n1 || !n2) return '';
+  const NOTE_S = {C:0,D:2,E:4,F:5,G:7,A:9,B:11};
+  function toMidi(n) {
+    const m = n.match(/^([A-G])(#|b)?(\d)/);
+    if (!m) return null;
+    let s = NOTE_S[m[1]]; if(m[2]==='#')s++; if(m[2]==='b')s--;
+    return 12*(parseInt(m[3])+1)+s;
+  }
+  const m1=toMidi(n1), m2=toMidi(n2);
+  if(m1===null||m2===null) return '';
+  const d=m2-m1, abs=Math.abs(d);
+  const names={0:'P1',1:'m2',2:'M2',3:'m3',4:'M3',5:'P4',6:'TT',7:'P5',8:'m6',9:'M6',10:'m7',11:'M7',12:'P8'};
+  const name=names[abs]||(abs>12?names[abs%12]:'');
+  return name?(d>0?name+'\u2191':d<0?name+'\u2193':'P1'):'';
+}
+
+function noteToScaleDegree(note, tonic) {
+  if (!note || !tonic) return '?';
+  const SEMI = {C:0,'C#':1,Db:1,D:2,'D#':3,Eb:3,E:4,F:5,'F#':6,Gb:6,G:7,'G#':8,Ab:8,A:9,'A#':10,Bb:10,B:11};
+  const m = note.match(/^([A-G])(#|b)?/);
+  if (!m) return '?';
+  const noteSemi = SEMI[m[1] + (m[2] || '')] ?? SEMI[m[1]];
+  const tonicSemi = SEMI[tonic] ?? 0;
+  if (noteSemi === undefined) return '?';
+  const interval = ((noteSemi - tonicSemi) + 12) % 12;
+  const degreeMap = {0:'1',1:'#1',2:'2',3:'b3',4:'3',5:'4',6:'#4',7:'5',8:'b6',9:'6',10:'b7',11:'7'};
+  return degreeMap[interval] || '?';
 }
 
 function renderSolfegeStructured(s) {
@@ -1652,10 +1767,28 @@ function renderSolfegeStructured(s) {
 
     const notes = m.notes || [], sol = m.solfege || [];
     if (notes.length) {
-      h += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">';
+      h += '<div style="display:flex;gap:0;flex-wrap:wrap;margin-bottom:10px;align-items:flex-end;">';
       for (let i = 0; i < Math.max(notes.length, sol.length); i++) {
         const n = notes[i] || '', s2 = sol[i] || '?';
-        h += `<div style="display:flex;flex-direction:column;align-items:center;gap:3px;min-width:34px;"><div style="font-size:0.7rem;color:var(--muted);font-family:monospace;">${esc(n)}</div><div style="font-family:'Cormorant Garamond',serif;font-size:1.2rem;font-weight:700;color:${s2==='?' ? 'var(--error)' : 'var(--text)'};">${esc(s2)}</div></div>`;
+        let displayText, displayColor;
+        if (solfegeSystem === 'fixed') {
+          displayText = n.replace(/\d+$/, '') || '?';
+          displayColor = getKodalyColor(s2);
+        } else if (solfegeSystem === 'degrees') {
+          displayText = noteToScaleDegree(n, s.tonic);
+          displayColor = getKodalyColor(s2);
+        } else {
+          displayText = s2;
+          displayColor = getKodalyColor(s2);
+        }
+        if (i > 0) {
+          const prevN = notes[i-1] || '', currN = n;
+          const intv = getIntervalLabel(prevN, currN);
+          if (intv) {
+            h += `<div style="display:flex;align-items:center;justify-content:center;min-width:18px;padding:0 1px;"><span style="font-size:0.52rem;color:var(--muted);background:var(--card2);border-radius:4px;padding:1px 4px;white-space:nowrap;margin-top:14px;">${esc(intv)}</span></div>`;
+          }
+        }
+        h += `<div style="display:flex;flex-direction:column;align-items:center;gap:3px;min-width:34px;padding:0 3px;"><div style="font-size:0.7rem;color:var(--muted);font-family:monospace;">${esc(n)}</div><div style="font-family:'Cormorant Garamond',serif;font-size:1.2rem;font-weight:700;color:${displayColor};">${esc(displayText)}</div></div>`;
       }
       h += '</div>';
     }
@@ -1678,6 +1811,7 @@ function editMeasureSolfege(num) {
   const pi = practiceData.findIndex(x => String(x.num) === String(num));
   if (pi >= 0) practiceData[pi].solfege = m.solfege;
   $('solfegeOutput').innerHTML = renderSolfegeStructured(_solfegeStructured);
+  showToast('Correction saved', 'success');
   const imgHash = currentAnalysis?._imageHash;
   if (imgHash) fetch('/api/analyze', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'correct', imageHash: imgHash, field: `solfege_m${num}`, value: corrected.trim() }) }).catch(() => {});
 }
@@ -1781,6 +1915,10 @@ function startPracticeMode() {
   if (!practiceData.length) return;
   practiceIndex = 0; practiceStreak = 0;
   $('practiceProgress').classList.add('show');
+  $('speedControl').style.display = 'flex';
+  $('practiceStreakCounter').style.display = 'block';
+  if ($('totalSessionsCount')) $('totalSessionsCount').textContent = totalPracticeSessions;
+  savePracticeSession();
   showPracticeMeasure();
 }
 
@@ -1803,12 +1941,16 @@ function showPracticeMeasure() {
 function nextMeasure() {
   if (!$('practiceCard').classList.contains('show')) return;
   practiceStreak++;
-  if (practiceStreak > 0 && practiceStreak % 3 === 0) launchConfetti();
-  if (practiceIndex < practiceData.length - 1) {
+  if (practiceStreak > 0 && practiceStreak % 3 === 0) { launchConfetti(); showToast(`${practiceStreak} streak!`, 'success'); }
+  if (loopActive && practiceIndex >= loopEnd) {
+    practiceIndex = loopStart;
+    showPracticeMeasure();
+  } else if (practiceIndex < practiceData.length - 1) {
     practiceIndex++;
     showPracticeMeasure();
   } else {
     launchConfetti();
+    showToast('Practice complete!', 'success');
     $('practiceSolfegeDisplay').textContent = 'Practice Complete!';
     $('practiceNotesDisplay').textContent = '';
     $('practiceLyricsDisplay').textContent = `${practiceData.length} measures mastered.`;
@@ -1824,10 +1966,24 @@ function playCurrentMeasure() {
   const m = practiceData[practiceIndex];
   if (!m?.notes?.length) return;
   const tempo = currentAnalysis?.tempo?.match(/\d+/)?.[0] || 80;
-  const beatMs = (60 / Number(tempo)) * 1000;
+  const speed = ($('speedSlider')?.value || 100) / 100;
+  const beatMs = (60 / Number(tempo)) * 1000 / speed;
+  const countInBeats = 4;
+  const countInMs = beatMs * 0.6;
+  for (let c = 0; c < countInBeats; c++) {
+    setTimeout(() => {
+      const ctx = new AudioContext();
+      const o = ctx.createOscillator(); const g = ctx.createGain();
+      o.frequency.value = c === 0 ? 1000 : 800; o.type = 'sine';
+      g.gain.setValueAtTime(0.2, ctx.currentTime); g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.04);
+      o.connect(g); g.connect(ctx.destination); o.start(); o.stop(ctx.currentTime + 0.04);
+      setTimeout(() => ctx.close(), 200);
+    }, c * countInMs);
+  }
+  const offset = countInBeats * countInMs;
   m.notes.forEach((n, i) => {
     const p = parseNote(n);
-    if (p) setTimeout(() => playPiano(p.freq, 0.6), i * beatMs * 0.6);
+    if (p) setTimeout(() => playPiano(p.freq, 0.6), offset + i * beatMs * 0.6);
   });
 }
 
@@ -1894,6 +2050,7 @@ async function submitRecording() {
     if (!resp.ok) throw new Error(`Error: ${resp.status}`);
     const result = await resp.json();
     $('coachEvaluating').classList.remove('show');
+    showToast('Recording evaluated!', 'success');
     renderCoachScores(result);
     coachHistory.unshift({ ...result, date: new Date().toLocaleDateString(), piece: currentAnalysis?.pieceTitle || 'Unknown' });
     if (coachHistory.length > 10) coachHistory.splice(10);
@@ -2224,6 +2381,191 @@ function showShortcuts() { $('shortcutsOverlay').classList.add('show'); }
 function closeShortcuts() { $('shortcutsOverlay').classList.remove('show'); }
 
 renderHistory();
+
+// ═══════════════════════════════════════════════════════════════
+// TOAST NOTIFICATIONS
+// ═══════════════════════════════════════════════════════════════
+function showToast(msg, type='info', duration=3000) {
+  const t = document.createElement('div');
+  t.className = `toast ${type}`;
+  const icons = { success:'\u2713', error:'\u2717', info:'\u2139' };
+  t.innerHTML = `<span style="font-size:1rem;">${icons[type]||'\u2139'}</span> ${esc(msg)}`;
+  $('toastContainer').appendChild(t);
+  setTimeout(() => { t.style.opacity='0'; t.style.transform='translateY(10px)'; setTimeout(() => t.remove(), 300); }, duration);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SOLFEGE SYSTEM TOGGLE
+// ═══════════════════════════════════════════════════════════════
+function setSolfegeSystem(sys) {
+  solfegeSystem = sys;
+  localStorage.setItem('solfai-solfege-system', sys);
+  document.querySelectorAll('#solfegeSystemToggle .part-btn').forEach(b => b.classList.remove('active'));
+  if (sys === 'movable') $('movableDoBtn').classList.add('active');
+  else if (sys === 'fixed') $('fixedDoBtn').classList.add('active');
+  else $('degreesBtn').classList.add('active');
+  if (_solfegeStructured) $('solfegeOutput').innerHTML = renderSolfegeStructured(_solfegeStructured);
+}
+// Restore saved solfege system on load
+(function() {
+  const saved = localStorage.getItem('solfai-solfege-system');
+  if (saved && saved !== 'movable') {
+    document.querySelectorAll('#solfegeSystemToggle .part-btn').forEach(b => b.classList.remove('active'));
+    if (saved === 'fixed') $('fixedDoBtn')?.classList.add('active');
+    else if (saved === 'degrees') $('degreesBtn')?.classList.add('active');
+  }
+})();
+
+// ═══════════════════════════════════════════════════════════════
+// PRACTICE MODE IMPROVEMENTS
+// ═══════════════════════════════════════════════════════════════
+function toggleLoop() {
+  loopActive = !loopActive;
+  if (loopActive) { loopStart = practiceIndex; loopEnd = Math.min(practiceIndex + 3, practiceData.length - 1); showToast(`Looping measures ${loopStart+1}-${loopEnd+1}`, 'info'); $('btnLoop').style.borderColor='var(--gold)'; $('btnLoop').style.color='var(--gold)'; }
+  else { showToast('Loop off', 'info'); $('btnLoop').style.borderColor=''; $('btnLoop').style.color=''; }
+}
+
+function toggleMetronome() {
+  metronomeActive = !metronomeActive;
+  if (metronomeActive) {
+    const bpm = currentAnalysis?.tempo?.match(/\d+/)?.[0] || 80;
+    const ms = 60000 / Number(bpm);
+    metronomeTid = setInterval(() => {
+      const ctx = new AudioContext();
+      const o = ctx.createOscillator(); const g = ctx.createGain();
+      o.frequency.value = 800; o.type = 'sine';
+      g.gain.setValueAtTime(0.3, ctx.currentTime); g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.05);
+      o.connect(g); g.connect(ctx.destination); o.start(); o.stop(ctx.currentTime + 0.05);
+      setTimeout(() => ctx.close(), 200);
+    }, ms);
+    showToast(`Metronome: ${bpm} BPM`, 'info');
+    $('btnMetronome').style.borderColor='var(--gold)'; $('btnMetronome').style.color='var(--gold)';
+  } else { clearInterval(metronomeTid); showToast('Metronome off', 'info'); $('btnMetronome').style.borderColor=''; $('btnMetronome').style.color=''; }
+}
+
+function togglePracticeFullscreen() {
+  if (practiceFullscreen) {
+    const fs = document.querySelector('.practice-fullscreen');
+    if (fs) fs.remove();
+    practiceFullscreen = false;
+    $('practiceCard').classList.add('show');
+    return;
+  }
+  practiceFullscreen = true;
+  const card = $('practiceCard');
+  const clone = card.cloneNode(true);
+  clone.style.display = 'block';
+  const fs = document.createElement('div');
+  fs.className = 'practice-fullscreen';
+  fs.innerHTML = `<button onclick="togglePracticeFullscreen()" style="position:absolute;top:24px;right:24px;background:none;border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text2);font-size:1.2rem;cursor:pointer;padding:8px 14px;z-index:10;">&times;</button>`;
+  fs.appendChild(clone);
+  document.body.appendChild(fs);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// DRONE & TUNING
+// ═══════════════════════════════════════════════════════════════
+function toggleDrone() {
+  if (droneOsc) { droneOsc.stop(); droneCtx.close(); droneOsc = null; droneCtx = null; showToast('Drone off', 'info'); return; }
+  const tonic = currentAnalysis?.keySignature?.split(' ')[0];
+  if (!tonic) { showToast('Analyze a piece first', 'error'); return; }
+  const p = parseNote(tonic + '3');
+  if (!p) return;
+  droneCtx = new AudioContext();
+  droneOsc = droneCtx.createOscillator();
+  const g = droneCtx.createGain();
+  droneOsc.frequency.value = p.freq;
+  droneOsc.type = 'sine';
+  g.gain.value = 0.08;
+  droneOsc.connect(g); g.connect(droneCtx.destination);
+  droneOsc.start();
+  showToast(`Drone: ${tonic} (${Math.round(p.freq)} Hz)`, 'success');
+}
+
+function playTuningRef() {
+  playPiano(440, 2.0);
+  showToast('A440 reference', 'info');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// FONT SIZE
+// ═══════════════════════════════════════════════════════════════
+const FONT_SIZES = [{name:'Small',size:'13px'},{name:'Normal',size:'15px'},{name:'Large',size:'17px'},{name:'X-Large',size:'19px'}];
+let fontSizeIdx = parseInt(localStorage.getItem('solfai-font-idx') || '1');
+function cycleFontSize() {
+  fontSizeIdx = (fontSizeIdx + 1) % FONT_SIZES.length;
+  document.body.style.fontSize = FONT_SIZES[fontSizeIdx].size;
+  $('fontSizeLabel').textContent = FONT_SIZES[fontSizeIdx].name;
+  localStorage.setItem('solfai-font-idx', fontSizeIdx);
+  showToast(`Font: ${FONT_SIZES[fontSizeIdx].name}`, 'info');
+}
+(function() {
+  document.body.style.fontSize = FONT_SIZES[fontSizeIdx].size;
+  if ($('fontSizeLabel')) $('fontSizeLabel').textContent = FONT_SIZES[fontSizeIdx].name;
+})();
+
+// ═══════════════════════════════════════════════════════════════
+// PERSISTENT STREAK & SESSION COUNTER
+// ═══════════════════════════════════════════════════════════════
+function savePracticeSession() {
+  totalPracticeSessions++;
+  localStorage.setItem('solfai-practice-sessions', totalPracticeSessions);
+  if ($('totalSessionsCount')) $('totalSessionsCount').textContent = totalPracticeSessions;
+  if (totalPracticeSessions % 5 === 0) showToast(`${totalPracticeSessions} practice sessions! Keep it up!`, 'success');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ONBOARDING
+// ═══════════════════════════════════════════════════════════════
+function showOnboarding() {
+  if (localStorage.getItem('solfai-onboarded')) return;
+  const steps = [
+    { title: 'Welcome to Solfai', desc: 'Your AI-powered sheet music coach. Upload any sheet music and get instant analysis with solfege, rhythm guides, and practice tools.' },
+    { title: 'Upload & Analyze', desc: 'Drop a photo, PDF, or MusicXML of your sheet music. Solfai extracts key, time signature, notes, and generates solfege for your voice part.' },
+    { title: 'Practice & Improve', desc: 'Use Practice Mode to work measure-by-measure, Vocal Coach for recording feedback, and Pitch Guide for real-time tuning. Ready? Let\'s go!' }
+  ];
+  let step = 0;
+  const overlay = document.createElement('div');
+  overlay.className = 'onboarding-overlay';
+  function render() {
+    overlay.innerHTML = `<div class="onboarding-card">
+      <div style="font-size:2.5rem;margin-bottom:16px;opacity:0.7;">${step===0?'\u{1F3B5}':step===1?'\u{1F4F7}':'\u{1F3AF}'}</div>
+      <div style="font-family:'Cormorant Garamond',serif;font-size:1.6rem;font-weight:700;color:var(--gold);margin-bottom:12px;">${steps[step].title}</div>
+      <div style="font-size:0.88rem;color:var(--text2);line-height:1.75;margin-bottom:28px;font-weight:300;">${steps[step].desc}</div>
+      <button class="btn-primary" onclick="this.closest('.onboarding-overlay').querySelector('[data-action]').click()">${step<2?'Next':'Get Started'}</button>
+      <div class="onboarding-step-dots">${steps.map((_,i)=>`<div class="onboarding-dot${i===step?' active':''}"></div>`).join('')}</div>
+      <button data-action style="display:none;"></button>
+    </div>`;
+    overlay.querySelector('[data-action]').onclick = () => {
+      if (step < 2) { step++; render(); }
+      else { localStorage.setItem('solfai-onboarded', '1'); overlay.remove(); }
+    };
+  }
+  render();
+  document.body.appendChild(overlay);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SKELETON LOADING
+// ═══════════════════════════════════════════════════════════════
+function showSkeletonLoading() {
+  return `<div style="animation:fadeUp 0.3s var(--transition);">
+    <div class="skeleton-grid">${'<div class="skeleton skeleton-card"></div>'.repeat(5)}</div>
+    <div class="skeleton skeleton-bar" style="width:60%;margin-bottom:20px;"></div>
+    <div class="skeleton skeleton-block" style="margin-bottom:16px;"></div>
+    <div class="skeleton skeleton-bar" style="width:40%;"></div>
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SERVICE WORKER REGISTRATION
+// ═══════════════════════════════════════════════════════════════
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch(() => {});
+}
+
+// Show onboarding on first visit
+setTimeout(showOnboarding, 500);
 
 // ═══════════════════════════════════════════════════════════════
 // KEYBOARD SHORTCUTS
