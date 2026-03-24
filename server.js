@@ -3319,7 +3319,7 @@ const SCALE_INTERVALS = {
   minor: [0, 2, 3, 5, 7, 8, 10],
 };
 
-function generateSightReading(difficulty, key, timeSig, numMeasures) {
+function generateSightReading(difficulty, key, timeSig, numMeasures, weakSyllables = []) {
   const tonic = (key || 'C').replace(/\s*(major|minor)/i, '').trim();
   const isMinor = (key || '').toLowerCase().includes('minor');
   const scaleType = isMinor ? 'minor' : 'major';
@@ -3391,16 +3391,37 @@ function generateSightReading(difficulty, key, timeSig, numMeasures) {
     });
   }
 
+  // Bias 40% of notes toward weak syllables for adaptive practice
+  if (weakSyllables.length > 0) {
+    const DEG = {Do:0,Di:0,Re:1,Ri:1,Me:2,Mi:2,Fa:3,Fi:3,Sol:4,Si:4,La:5,Li:5,Te:6,Ti:6};
+    const scaleNotes = Scale.get(key).notes;
+    const weakDegrees = [...new Set(weakSyllables.map(s=>DEG[s]).filter(d=>d!==undefined))];
+    if (weakDegrees.length && scaleNotes.length >= 7) {
+      for (const m of measures) {
+        for (let i = 0; i < (m.notes||[]).length; i++) {
+          if (Math.random() < 0.4) {
+            const deg = weakDegrees[Math.floor(Math.random()*weakDegrees.length)];
+            const pc = scaleNotes[deg];
+            if (pc) {
+              const currOct = parseInt((m.notes[i]||'').match(/\d/)?.[0]||'4');
+              m.notes[i] = pc + currOct;
+            }
+          }
+        }
+      }
+    }
+  }
+
   return measures;
 }
 
 app.post('/api/sight-reading', (req, res) => {
-  const { difficulty, key, timeSignature, measures: numMeasures } = req.body;
+  const { difficulty, key, timeSignature, measures: numMeasures, weakSyllables } = req.body;
   const measureCount = Math.max(4, Math.min(16, numMeasures || 4));
   const timeSig = timeSignature || '4/4';
   const keyName = key || 'C major';
 
-  const measures = generateSightReading(difficulty || 1, keyName, timeSig, measureCount);
+  const measures = generateSightReading(difficulty || 1, keyName, timeSig, measureCount, weakSyllables || []);
   const tonic = keyName.replace(/\s*(major|minor)/i, '').trim();
 
   console.log(`[Solfai] Sight-reading generated: ${measureCount} measures, difficulty=${difficulty}, key=${keyName}`);
@@ -4015,6 +4036,79 @@ app.post('/api/piece-context', async (req, res) => {
     console.error('[Solfai] Piece context error:', err.message);
     return res.status(500).json({ error: err.message });
   }
+});
+
+// ═══════════════════════════════════════════════════════════
+// CLASS SYSTEM — Teacher dashboard + student enrollment
+// ═══════════════════════════════════════════════════════════
+const CLASSES_FILE = join(__dirname, 'classes.json');
+function loadClasses() {
+  try { if (existsSync(CLASSES_FILE)) return JSON.parse(readFileSync(CLASSES_FILE,'utf8')); } catch(e) {}
+  return {};
+}
+function saveClasses(data) {
+  try { writeFileSync(CLASSES_FILE, JSON.stringify(data,null,2)); } catch(e) { console.error('[Solfai] saveClasses:',e.message); }
+}
+function genClassCode() {
+  const chars='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  return Array.from({length:6},()=>chars[Math.floor(Math.random()*chars.length)]).join('');
+}
+
+app.post('/api/class/create', (req,res) => {
+  const { teacherName, className, pin } = req.body;
+  if (!teacherName||!className||!pin||String(pin).length<4)
+    return res.status(400).json({error:'Fill all fields. PIN must be ≥4 characters.'});
+  const classes = loadClasses();
+  const code = genClassCode();
+  classes[code] = { code, teacherName, className, pin: String(pin), createdAt: new Date().toISOString(), students: {} };
+  saveClasses(classes);
+  console.log(`[Solfai] Class created: ${code} "${className}"`);
+  res.json({ code, className, teacherName });
+});
+
+app.post('/api/class/join', (req,res) => {
+  const { code, studentName } = req.body;
+  if (!code||!studentName) return res.status(400).json({error:'Missing code or name'});
+  const classes = loadClasses();
+  const cls = classes[String(code).toUpperCase()];
+  if (!cls) return res.status(404).json({error:'Class not found. Double-check your code.'});
+  if (!cls.students[studentName])
+    cls.students[studentName] = { sessions:[], joinedAt:new Date().toISOString(), lastActive:null };
+  saveClasses(classes);
+  res.json({ code:cls.code, className:cls.className, teacherName:cls.teacherName });
+});
+
+app.post('/api/class/report', (req,res) => {
+  const { code, studentName, pieceName, part, accuracy, duration, weakSyllables } = req.body;
+  if (!code||!studentName) return res.status(400).json({error:'Missing code or name'});
+  const classes = loadClasses();
+  const cls = classes[String(code).toUpperCase()];
+  if (!cls||!cls.students[studentName]) return res.status(404).json({error:'Not enrolled in this class'});
+  const session = { date:new Date().toISOString(), pieceName:pieceName||'Unknown', part:part||'Soprano', accuracy:Number(accuracy)||0, duration:Number(duration)||0, weakSyllables:weakSyllables||[] };
+  cls.students[studentName].sessions.push(session);
+  cls.students[studentName].lastActive = session.date;
+  if (cls.students[studentName].sessions.length > 50)
+    cls.students[studentName].sessions = cls.students[studentName].sessions.slice(-50);
+  saveClasses(classes);
+  res.json({ ok:true });
+});
+
+app.get('/api/class/dashboard/:code', (req,res) => {
+  const { code } = req.params;
+  const { pin } = req.query;
+  const classes = loadClasses();
+  const cls = classes[String(code).toUpperCase()];
+  if (!cls) return res.status(404).json({error:'Class not found'});
+  if (cls.pin !== String(pin)) return res.status(403).json({error:'Wrong PIN'});
+  const students = Object.entries(cls.students).map(([name,data]) => {
+    const sess = data.sessions||[];
+    const avg = sess.length ? Math.round(sess.reduce((s,x)=>s+x.accuracy,0)/sess.length) : 0;
+    const mins = Math.round(sess.reduce((s,x)=>s+x.duration,0)/60);
+    const wc = {}; sess.flatMap(s=>s.weakSyllables||[]).forEach(w=>wc[w]=(wc[w]||0)+1);
+    const topWeak = Object.entries(wc).sort((a,b)=>b[1]-a[1]).slice(0,3).map(e=>e[0]);
+    return { name, sessions:sess.length, avgAccuracy:avg, totalMins:mins, topWeak, lastActive:data.lastActive };
+  }).sort((a,b)=>(b.lastActive||'').localeCompare(a.lastActive||''));
+  res.json({ className:cls.className, teacherName:cls.teacherName, code:cls.code, studentCount:students.length, students });
 });
 
 // ─── Service Worker for PWA offline support ──────────────

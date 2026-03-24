@@ -1088,6 +1088,9 @@
       <span class="sidebar-item-icon">&#x1F4CA;</span>
       <span class="sidebar-item-label">Analytics</span>
     </div>
+    <div class="sidebar-item" onclick="switchSection('class')" data-section="class">
+      <span class="sidebar-icon">&#x1F465;</span><span class="sidebar-label">My Class</span>
+    </div>
     <div class="sidebar-divider"></div>
     <div class="sidebar-item" onclick="openCheatsheet()">
       <span class="sidebar-item-icon">&#x1F4D6;</span>
@@ -1630,6 +1633,99 @@
         <div class="stat-item"><div class="stat-value" id="pitchBestStreak">0</div><div class="stat-label">Best Streak</div></div>
       </div>
     </div>
+    <button class="btn-secondary" id="btnToggleSingAlong" onclick="toggleSingAlongPanel()" style="margin-top:18px;width:100%">&#x1F3A4; Sing-Along Mode</button>
+    <div id="singAlongPanel" style="display:none;margin-top:20px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+        <div>
+          <div style="font-size:0.65rem;text-transform:uppercase;letter-spacing:3px;color:var(--muted);font-weight:500">Sing-Along</div>
+          <div id="singAlongPieceName" style="font-size:0.9rem;color:var(--text2)">Analyze a piece first</div>
+        </div>
+        <button class="btn-violet" id="btnStartSingAlong" onclick="startSingAlong()" disabled>&#x25B6; Start</button>
+      </div>
+      <div id="singAlongTarget" style="display:none;text-align:center;padding:28px;background:var(--card);border-radius:var(--radius-md);box-shadow:var(--shadow-card);margin-bottom:16px;">
+        <div style="font-size:0.65rem;text-transform:uppercase;letter-spacing:2px;color:var(--muted)">Measure <span id="saMeasure">1</span> &middot; Note <span id="saNoteNum">1</span></div>
+        <div id="saSolfege" style="font-family:'Cormorant Garamond',serif;font-size:5rem;font-weight:700;transition:color 0.2s;line-height:1">Sol</div>
+        <div id="saNoteName" style="font-size:1rem;color:var(--muted);margin-top:4px">G4</div>
+        <div id="saResult" style="font-size:1.3rem;font-weight:700;margin-top:10px;min-height:1.8rem;transition:color 0.3s"></div>
+      </div>
+      <div style="background:var(--surface);border-radius:999px;height:5px;margin-bottom:12px;overflow:hidden">
+        <div id="saProgress" style="height:100%;background:var(--gold);border-radius:999px;width:0%;transition:width 0.4s"></div>
+      </div>
+      <div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:16px">
+        <div class="stat-item"><div class="stat-value" id="saCorrect">0</div><div class="stat-label">Correct</div></div>
+        <div class="stat-item"><div class="stat-value" id="saTotal">0</div><div class="stat-label">Total</div></div>
+        <div class="stat-item"><div class="stat-value" id="saAccPct">--%</div><div class="stat-label">Accuracy</div></div>
+        <div class="stat-item"><div class="stat-value" id="saStreak">0</div><div class="stat-label">Streak</div></div>
+      </div>
+      <div id="saBreakdown" style="display:none;background:var(--card);border-radius:var(--radius-md);padding:18px;box-shadow:var(--shadow-card)">
+        <div style="font-size:0.65rem;text-transform:uppercase;letter-spacing:3px;color:var(--muted);margin-bottom:12px;font-weight:500">Accuracy by Syllable</div>
+        <div id="saBreakdownGrid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(80px,1fr));gap:10px"></div>
+        <button class="btn-primary" style="margin-top:14px;width:100%" onclick="reportSingAlongToClass()">&#x1F4CA; Report to Class</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="app-section" id="section-class">
+    <div class="section-header">
+      <div class="section-label">Choir Community</div>
+      <h2 class="section-title">My Class</h2>
+      <div class="section-desc">Connect with your choir director and track progress together</div>
+    </div>
+    <div id="clsJoin">
+      <div class="content-box" style="margin-bottom:18px">
+        <div style="font-family:'Cormorant Garamond',serif;font-size:1.3rem;font-weight:600;margin-bottom:14px">Join a Class</div>
+        <div style="display:flex;flex-direction:column;gap:12px;max-width:340px">
+          <input class="text-input" id="clsCodeIn" placeholder="Class code (e.g. HX7K2P)" maxlength="6" style="text-transform:uppercase;letter-spacing:4px;font-size:1.1rem;text-align:center">
+          <input class="text-input" id="clsNameIn" placeholder="Your name">
+          <button class="btn-primary" onclick="joinClass()">Join Class</button>
+        </div>
+      </div>
+      <div style="border-top:1px solid var(--border);padding-top:16px">
+        <div style="font-size:0.82rem;color:var(--muted);margin-bottom:10px">Are you a teacher?</div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <button class="btn-secondary" onclick="showClsPanel('clsCreate')">Create a Class</button>
+          <button class="btn-secondary" onclick="showClsPanel('clsView')">View Dashboard</button>
+        </div>
+      </div>
+    </div>
+    <div id="clsStudent" style="display:none">
+      <div class="content-box violet-border" style="margin-bottom:18px">
+        <div style="font-size:0.65rem;text-transform:uppercase;letter-spacing:3px;color:var(--muted);margin-bottom:4px">Enrolled In</div>
+        <div style="font-family:'Cormorant Garamond',serif;font-size:1.6rem;font-weight:700" id="clsMyName">&#x2014;</div>
+        <div style="font-size:0.82rem;color:var(--muted)">Teacher: <span id="clsMyTeacher">&#x2014;</span> &middot; Code: <span id="clsMyCode" style="font-weight:600;letter-spacing:2px;color:var(--gold)">&#x2014;</span></div>
+      </div>
+      <div style="background:var(--card);border-radius:var(--radius-md);padding:18px;box-shadow:var(--shadow-card);margin-bottom:16px">
+        <div style="font-size:0.65rem;text-transform:uppercase;letter-spacing:3px;color:var(--muted);margin-bottom:12px;font-weight:500">Recent Practice Reports</div>
+        <div id="clsMyReports" style="font-size:0.85rem;color:var(--muted)">No reports yet. Complete a Sing-Along session to send one.</div>
+      </div>
+      <button class="btn-secondary" style="color:var(--error)" onclick="leaveClass()">Leave Class</button>
+    </div>
+    <div id="clsCreate" style="display:none">
+      <div class="content-box" style="margin-bottom:18px">
+        <div style="font-family:'Cormorant Garamond',serif;font-size:1.3rem;font-weight:600;margin-bottom:14px">Create a Class</div>
+        <div style="display:flex;flex-direction:column;gap:12px;max-width:340px">
+          <input class="text-input" id="clsTeacherIn" placeholder="Your name (e.g. Ms. Johnson)">
+          <input class="text-input" id="clsClassIn" placeholder="Class name (e.g. Concert Choir 2025)">
+          <input class="text-input" id="clsPinIn" type="password" placeholder="Dashboard PIN (4+ digits)" maxlength="8">
+          <button class="btn-primary" onclick="createClass()">Create Class</button>
+          <button class="btn-secondary" onclick="showClsPanel('clsJoin')">&larr; Back</button>
+        </div>
+      </div>
+    </div>
+    <div id="clsView" style="display:none">
+      <div class="content-box" style="margin-bottom:18px">
+        <div style="font-family:'Cormorant Garamond',serif;font-size:1.3rem;font-weight:600;margin-bottom:14px">Teacher Dashboard</div>
+        <div style="display:flex;flex-direction:column;gap:12px;max-width:340px">
+          <input class="text-input" id="clsDashCode" placeholder="Class code">
+          <input class="text-input" id="clsDashPin" type="password" placeholder="PIN">
+          <button class="btn-primary" onclick="loadTeacherDash()">View Dashboard</button>
+          <button class="btn-secondary" onclick="showClsPanel('clsJoin')">&larr; Back</button>
+        </div>
+      </div>
+    </div>
+    <div id="clsDash" style="display:none">
+      <div id="clsDashContent"></div>
+    </div>
   </section>
 
 </div>
@@ -1663,13 +1759,21 @@ let metronomeActive = false, metronomeTid = null;
 let droneOsc = null, droneCtx = null;
 let practiceFullscreen = false;
 let totalPracticeSessions = parseInt(localStorage.getItem('solfai-practice-sessions') || '0');
+// Sing-Along state
+let singAlongActive = false, singAlongNotes = [], singAlongIdx = 0;
+let singAlongCorrect = 0, singAlongTotal = 0, singAlongStrk = 0;
+let singAlongSyllableStats = {}, singAlongHoldStart = 0;
+const SA_HOLD_MS = 600, SA_CENTS = 25;
+// Class system state
+let myClass = JSON.parse(localStorage.getItem('solfai-my-class')||'null');
+let _clsDashCode = '', _clsDashPin = '';
 
 const $ = id => document.getElementById(id);
 
 // ═══════════════════════════════════════════════════════════════
 // NAV & SECTIONS (sidebar version)
 // ═══════════════════════════════════════════════════════════════
-const sectionTitles = { analyze: 'Analyze', practice: 'Practice', 'vocal-coach': 'Vocal Coach', 'pitch-guide': 'Pitch Guide', analytics: 'Analytics' };
+const sectionTitles = { analyze: 'Analyze', practice: 'Practice', 'vocal-coach': 'Vocal Coach', 'pitch-guide': 'Pitch Guide', analytics: 'Analytics', class: 'My Class' };
 
 function switchSection(name) {
   document.querySelectorAll('.app-section').forEach(s => s.classList.remove('active'));
@@ -1677,6 +1781,8 @@ function switchSection(name) {
   $('section-' + name)?.classList.add('active');
   document.querySelector(`.sidebar-item[data-section="${name}"]`)?.classList.add('active');
   $('topBarTitle').textContent = sectionTitles[name] || name;
+  if (name === 'class') initClassSection();
+  if (name === 'practice') buildWeakPanel();
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -2706,6 +2812,7 @@ function updatePitchLoop() {
   const freq = acPitch(buf, pitchCtx.sampleRate);
   const info = freq > 0 ? freqToNote(freq) : null;
   const now = Date.now();
+  checkSingAlong(freq, now);
 
   if (info) {
     const { noteName, octave, cents } = info;
@@ -5388,7 +5495,7 @@ async function runAudition(type) {
     try {
       const res = await fetch('/api/sight-reading', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ difficulty: 3, key: 'C', numMeasures: 4 })
+        body: JSON.stringify({ difficulty: 3, key: 'C', numMeasures: 4, weakSyllables: JSON.parse(localStorage.getItem('solfai-weak-syllables')||'[]') })
       });
       const data = await res.json();
       const ex = $('auditionExercise');
@@ -5572,6 +5679,283 @@ async function recordAudition() {
   const savedUser = localStorage.getItem('solfai-user');
   if (savedUser) try { currentUser = JSON.parse(savedUser); } catch (e) {}
   updateUserUI();
+
+// ════════════════════════════════════════════════════════════
+// SING-ALONG MODE
+// ════════════════════════════════════════════════════════════
+function toggleSingAlongPanel() {
+  const p = $('singAlongPanel');
+  const showing = p.style.display !== 'none';
+  p.style.display = showing ? 'none' : 'block';
+  if (!showing) refreshSingAlongState();
+}
+
+function refreshSingAlongState() {
+  singAlongNotes = [];
+  for (const m of (practiceData || [])) {
+    for (let i = 0; i < (m.notes || []).length; i++) {
+      const note = m.notes[i];
+      const solfege = (m.solfegeArr && m.solfegeArr[i]) || (Array.isArray(m.solfege) ? m.solfege[i] : null) || '?';
+      if (note && note !== '[?]') singAlongNotes.push({ note, solfege, measure: m.num, noteIdx: i + 1 });
+    }
+  }
+  const has = singAlongNotes.length > 0;
+  $('btnStartSingAlong').disabled = !has;
+  $('singAlongPieceName').textContent = has ? `${singAlongNotes.length} notes \u00b7 ${currentAnalysis?.key || ''}` : 'Analyze a piece first';
+}
+
+function startSingAlong() {
+  if (!singAlongNotes.length) return;
+  singAlongActive = true; singAlongIdx = 0;
+  singAlongCorrect = 0; singAlongTotal = 0; singAlongStrk = 0;
+  singAlongSyllableStats = {}; singAlongHoldStart = 0;
+  $('singAlongTarget').style.display = 'block';
+  $('saBreakdown').style.display = 'none';
+  $('btnStartSingAlong').textContent = '\u23F9 Stop';
+  $('btnStartSingAlong').onclick = stopSingAlong;
+  updateSADisplay();
+  if (!pitchActive) startPitch();
+}
+
+function stopSingAlong() {
+  singAlongActive = false;
+  $('btnStartSingAlong').textContent = '\u25B6 Start';
+  $('btnStartSingAlong').onclick = startSingAlong;
+  showSABreakdown();
+  saveSAWeakSpots();
+}
+
+function updateSADisplay() {
+  if (singAlongIdx >= singAlongNotes.length) { if (singAlongNotes.length > 0) stopSingAlong(); return; }
+  const e = singAlongNotes[singAlongIdx];
+  const SOL_COLORS = {Do:'#e74c3c',Di:'#c0392b',Re:'#e67e22',Ri:'#d35400',Me:'#8e44ad',Mi:'#f1c40f',Fa:'#27ae60',Fi:'#1e8449',Sol:'#2980b9',Si:'#1a5276',La:'#8e44ad',Li:'#7d3c98',Te:'#6c3483',Ti:'#e91e8c'};
+  $('saSolfege').textContent = e.solfege;
+  $('saSolfege').style.color = SOL_COLORS[e.solfege] || 'var(--text)';
+  $('saNoteName').textContent = e.note;
+  $('saMeasure').textContent = e.measure;
+  $('saNoteNum').textContent = e.noteIdx;
+  $('saResult').textContent = '';
+  $('saProgress').style.width = Math.round(singAlongIdx / singAlongNotes.length * 100) + '%';
+  singAlongHoldStart = 0;
+}
+
+function noteToHz(noteName) {
+  if (!noteName) return null;
+  const PC_MAP = {'C':0,'C#':1,'Db':1,'D':2,'D#':3,'Eb':3,'E':4,'F':5,'F#':6,'Gb':6,'G':7,'G#':8,'Ab':8,'A':9,'A#':10,'Bb':10,'B':11};
+  const m = noteName.match(/^([A-Ga-g][#b]?)(\d)$/);
+  if (!m) return null;
+  const pc = PC_MAP[m[1].charAt(0).toUpperCase() + m[1].slice(1)];
+  if (pc === undefined) return null;
+  const oct = parseInt(m[2]);
+  const midi = 12 + pc + oct * 12;
+  return 440 * Math.pow(2, (midi - 69) / 12);
+}
+
+function checkSingAlong(freq, now) {
+  if (!singAlongActive || singAlongIdx >= singAlongNotes.length || freq <= 0) return;
+  const entry = singAlongNotes[singAlongIdx];
+  const targetHz = noteToHz(entry.note);
+  if (!targetHz) { singAlongIdx++; updateSADisplay(); return; }
+  const cents = 1200 * Math.log2(freq / targetHz);
+  const onTarget = Math.abs(cents) <= SA_CENTS;
+  if (onTarget) {
+    if (!singAlongHoldStart) singAlongHoldStart = now;
+    const held = now - singAlongHoldStart;
+    const pct = Math.min(100, Math.round(held / SA_HOLD_MS * 100));
+    $('saResult').textContent = `Hold\u2026 ${pct}%`;
+    $('saResult').style.color = 'var(--success)';
+    if (held >= SA_HOLD_MS) {
+      singAlongCorrect++; singAlongTotal++; singAlongStrk++;
+      const syl = entry.solfege;
+      if (!singAlongSyllableStats[syl]) singAlongSyllableStats[syl] = {correct:0,total:0};
+      singAlongSyllableStats[syl].correct++;
+      singAlongSyllableStats[syl].total++;
+      $('saCorrect').textContent = singAlongCorrect;
+      $('saTotal').textContent = singAlongTotal;
+      $('saAccPct').textContent = Math.round(singAlongCorrect/singAlongTotal*100)+'%';
+      $('saStreak').textContent = singAlongStrk;
+      $('saResult').textContent = '\u2713 Correct!';
+      singAlongIdx++;
+      setTimeout(updateSADisplay, 400);
+    }
+  } else {
+    singAlongHoldStart = 0;
+    if (singAlongTotal > 0 || singAlongIdx > 0) {
+      $('saResult').textContent = cents > 0 ? '\u2193 Too sharp' : '\u2191 Too flat';
+      $('saResult').style.color = 'var(--error)';
+    }
+  }
+}
+
+function showSABreakdown() {
+  const SOL_COLORS = {Do:'#e74c3c',Re:'#e67e22',Mi:'#f1c40f',Fa:'#27ae60',Sol:'#2980b9',La:'#8e44ad',Ti:'#e91e8c'};
+  const grid = $('saBreakdownGrid');
+  if (!grid) return;
+  grid.innerHTML = '';
+  const entries = Object.entries(singAlongSyllableStats);
+  if (!entries.length) { $('saBreakdown').style.display = 'none'; return; }
+  for (const [syl, s] of entries) {
+    const pct = s.total > 0 ? Math.round(s.correct/s.total*100) : 0;
+    const el = document.createElement('div');
+    el.style.cssText='text-align:center;padding:10px 6px;background:var(--surface);border-radius:var(--radius-sm)';
+    el.innerHTML = `<div style="font-family:'Cormorant Garamond',serif;font-size:1.5rem;font-weight:700;color:${SOL_COLORS[syl]||'var(--text)'}">${syl}</div><div style="font-size:1rem;font-weight:600;color:${pct>=80?'var(--success)':pct>=50?'var(--gold)':'var(--error)'}">${pct}%</div><div style="font-size:0.65rem;color:var(--muted)">${s.correct}/${s.total}</div>`;
+    grid.appendChild(el);
+  }
+  $('saBreakdown').style.display = 'block';
+}
+
+function saveSAWeakSpots() {
+  const weak = Object.entries(singAlongSyllableStats)
+    .filter(([,s]) => s.total >= 2 && s.correct/s.total < 0.7)
+    .map(([syl]) => syl);
+  if (!weak.length) return;
+  const existing = JSON.parse(localStorage.getItem('solfai-weak-syllables')||'[]');
+  localStorage.setItem('solfai-weak-syllables', JSON.stringify([...new Set([...existing,...weak])]));
+}
+
+// ════════════════════════════════════════════════════════════
+// CLASS SYSTEM
+// ════════════════════════════════════════════════════════════
+function initClassSection() {
+  if (myClass) { showStudentEnrolled(); } else { showClsPanel('clsJoin'); }
+}
+
+function showClsPanel(id) {
+  ['clsJoin','clsStudent','clsCreate','clsView','clsDash'].forEach(p => { const el=$(p); if(el) el.style.display='none'; });
+  const el = $(id); if(el) el.style.display='block';
+}
+
+function showStudentEnrolled() {
+  showClsPanel('clsStudent');
+  $('clsMyName').textContent = myClass.className;
+  $('clsMyTeacher').textContent = myClass.teacherName;
+  $('clsMyCode').textContent = myClass.code;
+  renderMyReports();
+}
+
+function renderMyReports() {
+  const sessions = JSON.parse(localStorage.getItem('solfai-class-sessions')||'[]');
+  const el = $('clsMyReports');
+  if (!el) return;
+  if (!sessions.length) { el.textContent = 'No reports yet.'; return; }
+  el.innerHTML = sessions.slice(-5).reverse().map(s =>
+    `<div style="padding:8px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+      <span style="font-size:0.85rem">${s.pieceName||'Unknown'} \u00b7 ${s.part||''}</span>
+      <span style="color:${s.accuracy>=80?'var(--success)':s.accuracy>=60?'var(--gold)':'var(--error)'};font-weight:600;font-family:'Cormorant Garamond',serif;font-size:1.1rem">${s.accuracy}%</span>
+    </div>`
+  ).join('');
+}
+
+async function joinClass() {
+  const code = ($('clsCodeIn')?.value||'').trim().toUpperCase();
+  const name = ($('clsNameIn')?.value||'').trim();
+  if (!code||!name) return showToast('Enter class code and your name','error');
+  try {
+    const r = await fetch('/api/class/join',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code,studentName:name})});
+    const d = await r.json();
+    if (!r.ok) return showToast(d.error||'Failed to join','error');
+    myClass = {...d, studentName:name};
+    localStorage.setItem('solfai-my-class', JSON.stringify(myClass));
+    showStudentEnrolled();
+    showToast(`Joined ${d.className}! \uD83C\uDFB5`,'success');
+  } catch(e) { showToast('Network error','error'); }
+}
+
+async function createClass() {
+  const teacherName = ($('clsTeacherIn')?.value||'').trim();
+  const className = ($('clsClassIn')?.value||'').trim();
+  const pin = ($('clsPinIn')?.value||'').trim();
+  if (!teacherName||!className||!pin||pin.length<4) return showToast('Fill all fields. PIN must be 4+ chars.','error');
+  try {
+    const r = await fetch('/api/class/create',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({teacherName,className,pin})});
+    const d = await r.json();
+    if (!r.ok) return showToast(d.error||'Failed','error');
+    showToast(`Class created! Code: ${d.code} \u2014 share with students`,'success');
+    _clsDashCode = d.code; _clsDashPin = pin;
+    const dc=$('clsDashCode'); if(dc) dc.value=d.code;
+    const dp=$('clsDashPin'); if(dp) dp.value=pin;
+    showClsPanel('clsView');
+    await loadTeacherDash();
+  } catch(e) { showToast('Network error','error'); }
+}
+
+async function loadTeacherDash() {
+  const code = (_clsDashCode || ($('clsDashCode')?.value||'')).trim().toUpperCase();
+  const pin = (_clsDashPin || ($('clsDashPin')?.value||'')).trim();
+  if (!code||!pin) return showToast('Enter code and PIN','error');
+  _clsDashCode = code; _clsDashPin = pin;
+  try {
+    const r = await fetch(`/api/class/dashboard/${code}?pin=${encodeURIComponent(pin)}`);
+    const d = await r.json();
+    if (!r.ok) return showToast(d.error||'Failed','error');
+    renderTeacherDash(d);
+  } catch(e) { showToast('Network error','error'); }
+}
+
+function renderTeacherDash(data) {
+  const rows = data.students.length ? data.students.map(s =>
+    `<div style="display:flex;justify-content:space-between;align-items:center;padding:14px 0;border-bottom:1px solid var(--border)">
+      <div>
+        <div style="font-weight:600">${s.name}</div>
+        <div style="font-size:0.75rem;color:var(--muted)">${s.sessions} sessions \u00b7 ${s.totalMins}min${s.topWeak.length?' \u00b7 Weak: '+s.topWeak.join(', '):''}</div>
+      </div>
+      <div style="font-family:'Cormorant Garamond',serif;font-size:1.6rem;font-weight:700;color:${s.avgAccuracy>=80?'var(--success)':s.avgAccuracy>=60?'var(--gold)':'var(--error)'}">${s.sessions?s.avgAccuracy+'%':'\u2014'}</div>
+    </div>`).join('')
+    : `<div style="color:var(--muted);font-size:0.85rem">No students yet. Share code <strong>${data.code}</strong>.</div>`;
+  $('clsDashContent').innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px">
+      <div>
+        <div style="font-size:0.65rem;text-transform:uppercase;letter-spacing:3px;color:var(--muted)">Class Dashboard</div>
+        <div style="font-family:'Cormorant Garamond',serif;font-size:1.6rem;font-weight:700">${data.className}</div>
+        <div style="font-size:0.82rem;color:var(--muted)">Code: <strong style="color:var(--gold);letter-spacing:2px">${data.code}</strong> \u00b7 ${data.studentCount} students \u00b7 ${data.teacherName}</div>
+      </div>
+      <button class="btn-secondary" onclick="loadTeacherDash()">\u21BB Refresh</button>
+    </div>
+    <div style="background:var(--card);border-radius:var(--radius-md);padding:20px;box-shadow:var(--shadow-card)">${rows}</div>
+    <button class="btn-secondary" style="margin-top:14px" onclick="showClsPanel('clsView')">&larr; Back</button>`;
+  showClsPanel('clsDash');
+}
+
+function leaveClass() {
+  if (!confirm('Leave this class? Your practice history stays on your device.')) return;
+  myClass = null;
+  localStorage.removeItem('solfai-my-class');
+  showClsPanel('clsJoin');
+  showToast('Left class','info');
+}
+
+async function reportSingAlongToClass() {
+  if (!myClass) { showToast('Join a class first in My Class section','info'); return; }
+  const acc = singAlongTotal > 0 ? Math.round(singAlongCorrect/singAlongTotal*100) : 0;
+  const dur = singAlongTotal > 0 ? Math.round((Date.now() - (pitchSessionStart||Date.now()))/1000) : 60;
+  const pieceName = currentAnalysis?.pieceTitle || 'Unknown piece';
+  const weak = JSON.parse(localStorage.getItem('solfai-weak-syllables')||'[]');
+  const session = { pieceName, part:selectedPart, accuracy:acc, duration:dur, date:new Date().toISOString() };
+  const sessions = JSON.parse(localStorage.getItem('solfai-class-sessions')||'[]');
+  sessions.push(session);
+  localStorage.setItem('solfai-class-sessions', JSON.stringify(sessions.slice(-50)));
+  try {
+    const r = await fetch('/api/class/report',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:myClass.code,studentName:myClass.studentName,...session,weakSyllables:weak})});
+    showToast(r.ok ? 'Reported to class! \uD83D\uDCCA' : 'Could not report','success');
+  } catch(e) { showToast('Network error','error'); }
+}
+
+// ════════════════════════════════════════════════════════════
+// ADAPTIVE SIGHT-READING
+// ════════════════════════════════════════════════════════════
+function buildWeakPanel() {
+  const el = $('srWeakPanel');
+  if (!el) return;
+  const weak = JSON.parse(localStorage.getItem('solfai-weak-syllables')||'[]');
+  const COLS = {Do:'#e74c3c',Re:'#e67e22',Mi:'#f1c40f',Fa:'#27ae60',Sol:'#2980b9',La:'#8e44ad',Ti:'#e91e8c'};
+  if (!weak.length) {
+    el.innerHTML = '<div style="font-size:0.8rem;color:var(--muted)">\uD83C\uDFAF Practice with Sing-Along Mode to unlock adaptive exercises targeting your weak spots.</div>';
+    return;
+  }
+  el.innerHTML = `<div style="font-size:0.75rem;color:var(--muted);margin-bottom:8px">\uD83C\uDFAF Exercises will target your weak spots:</div>
+    <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:8px">${weak.map(s=>`<span style="padding:3px 10px;border-radius:999px;background:${COLS[s]||'var(--card)'};color:white;font-size:0.8rem;font-weight:600">${s}</span>`).join('')}</div>
+    <button style="font-size:0.72rem;color:var(--muted);background:none;border:none;cursor:pointer;padding:0" onclick="localStorage.removeItem('solfai-weak-syllables');buildWeakPanel()">Clear weak spots</button>`;
+}
 </script>
 </body>
 </html>
