@@ -1149,13 +1149,36 @@ async function callGemini(apiKey, systemPrompt, userParts, opts = {}) {
 
       const data = await resp.json();
       const candidate = data.candidates?.[0];
-      if (!candidate?.content?.parts) throw new Error('No response from Gemini');
 
-      return candidate.content.parts
-        .filter(p => p.text && !p.thought)
-        .map(p => p.text)
-        .join('')
-        .trim();
+      // Check for blocked/empty responses
+      if (!candidate) {
+        const blockReason = data.promptFeedback?.blockReason;
+        if (blockReason) {
+          console.warn(`[Solfai] Gemini blocked: ${blockReason}`);
+          throw new Error(`Gemini blocked response: ${blockReason}`);
+        }
+        throw new Error('No candidates in Gemini response');
+      }
+
+      const finishReason = candidate.finishReason;
+      if (finishReason && finishReason !== 'STOP' && finishReason !== 'MAX_TOKENS') {
+        console.warn(`[Solfai] Gemini finish reason: ${finishReason}`);
+      }
+
+      if (!candidate.content?.parts) {
+        console.warn(`[Solfai] Empty response parts. finishReason=${finishReason}, blockReason=${data.promptFeedback?.blockReason}`);
+        throw new Error(`Gemini returned empty response (${finishReason || 'unknown'})`);
+      }
+
+      const textParts = candidate.content.parts.filter(p => p.text && !p.thought);
+      if (!textParts.length) {
+        // May have only thought parts — try to use them
+        const allText = candidate.content.parts.filter(p => p.text).map(p => p.text).join('').trim();
+        if (allText) return allText;
+        throw new Error('Gemini returned no text content');
+      }
+
+      return textParts.map(p => p.text).join('').trim();
 
     } catch (err) {
       if (attempt === maxAttempts) throw err;
@@ -1348,72 +1371,68 @@ For SATB: Soprano=top treble staff stems up, Alto=bottom treble stems down, Teno
   const extractText = `Extract all musical data for the ${part} part. Skip title/cover pages. Be precise about accidental counting.`;
 
   // Launch ALL phases in parallel
+  // Reduced to 7 parallel calls to avoid rate limiting.
+  // Key sig: 2 reads (1 Pro cropped + 1 Flash full)
+  // Full extraction: 2 reads (1 Pro + 1 Flash)
+  // Starting pitch: 2 reads (1 Pro cropped + 1 Flash full)
+  // Total: 7 calls (was 11) — much less likely to hit rate limits
   const allPromises = [
-    // KEY SIG: 3 dedicated reads (2 Pro + 1 Flash)
+    // KEY SIG: 2 dedicated reads
     callGemini(apiKey, keySigPrompt,
-      [{ text: 'Count the key signature accidentals.' }, ...(keyRegionParts.length ? keyRegionParts : processedParts.slice(0, 1))],
-      { temperature: 0, maxOutputTokens: 128, responseSchema: KEY_SIG_SCHEMA, thinkingBudget: 4000 }
-    ),
-    callGemini(apiKey, keySigPrompt,
-      [{ text: 'Second read: Count key signature accidentals again, independently.' }, ...(keyRegionParts.length ? keyRegionParts : processedParts.slice(0, 1))],
+      [{ text: 'Count the key signature accidentals carefully.' },
+       ...(keyRegionParts.length ? keyRegionParts : processedParts.slice(0, 1))],
       { temperature: 0, maxOutputTokens: 128, responseSchema: KEY_SIG_SCHEMA, thinkingBudget: 4000 }
     ),
     callGemini(apiKey, keySigPrompt,
       [{ text: 'Count the flats and sharps in the key signature.' }, ...processedParts.slice(0, 1)],
       { model: GEMINI_FLASH, temperature: 0, maxOutputTokens: 128, responseSchema: KEY_SIG_SCHEMA, thinkingBudget: 0 }
     ),
-    // KEY SIG read 4: annotated image with red box highlighting key sig area
-    callGemini(apiKey, keySigPrompt,
-      [{ text: 'The key signature area is highlighted with a red box. Count the accidentals inside the red highlighted region.' },
-       ...(annotatedKeyParts.length ? annotatedKeyParts : keyRegionParts.length ? keyRegionParts : processedParts.slice(0, 1))],
-      { temperature: 0, maxOutputTokens: 128, responseSchema: KEY_SIG_SCHEMA, thinkingBudget: 4000 }
-    ),
 
-    // FULL EXTRACTION: 3 reads (2 Pro + 1 Flash) for self-consistency
+    // FULL EXTRACTION: 2 reads (Pro + Flash)
     callGemini(apiKey, fullExtractPrompt,
       [{ text: extractText }, ...processedParts],
       { temperature: 0, maxOutputTokens: 4096, responseSchema: ANALYZE_SCHEMA, thinkingBudget: 12000 }
     ),
     callGemini(apiKey, fullExtractPrompt,
       [{ text: `Independent verification: ${extractText} Double-check each value.` }, ...processedParts],
-      { temperature: 0, maxOutputTokens: 4096, responseSchema: ANALYZE_SCHEMA, thinkingBudget: 12000 }
-    ),
-    callGemini(apiKey, fullExtractPrompt,
-      [{ text: `Third independent read: ${extractText}` }, ...processedParts],
       { model: GEMINI_FLASH, temperature: 0, maxOutputTokens: 4096, responseSchema: ANALYZE_SCHEMA, thinkingBudget: 0 }
     ),
 
-    // STARTING PITCH: 3 dedicated reads (2 Pro + 1 Flash)
+    // STARTING PITCH: 2 dedicated reads
     callGemini(apiKey, pitchPrompt,
-      [{ text: `Find the first sung note for the ${part} part.` }, ...(firstSystemParts.length ? firstSystemParts : processedParts.slice(0, 1))],
-      { temperature: 0, maxOutputTokens: 256, responseSchema: PITCH_SCHEMA, thinkingBudget: 6000 }
-    ),
-    callGemini(apiKey, pitchPrompt,
-      [{ text: `Second read: Find the first sung note for ${part}. Be extra careful about line vs space.` }, ...(firstSystemParts.length ? firstSystemParts : processedParts.slice(0, 1))],
+      [{ text: `Find the first sung note for the ${part} part.` },
+       ...(firstSystemParts.length ? firstSystemParts : processedParts.slice(0, 1))],
       { temperature: 0, maxOutputTokens: 256, responseSchema: PITCH_SCHEMA, thinkingBudget: 6000 }
     ),
     callGemini(apiKey, pitchPrompt,
       [{ text: `Find the starting pitch for ${part}.` }, ...processedParts.slice(0, 1)],
       { model: GEMINI_FLASH, temperature: 0, maxOutputTokens: 256, responseSchema: PITCH_SCHEMA, thinkingBudget: 0 }
     ),
-    // PITCH read 4: 2x zoom crop of first 2 measures for additional accuracy
-    callGemini(apiKey, pitchPrompt,
-      [{ text: `This is a zoomed-in crop of the first 2 measures. Find the first sung note for ${part}.` },
-       ...(first2MeasuresParts.length ? first2MeasuresParts : firstSystemParts.length ? firstSystemParts : processedParts.slice(0, 1))],
-      { temperature: 0, maxOutputTokens: 256, responseSchema: PITCH_SCHEMA, thinkingBudget: 6000 }
-    ),
   ];
 
-  const results = await Promise.all(allPromises);
+  // Use allSettled so one failed call doesn't kill everything
+  const settled = await Promise.allSettled(allPromises);
+  const results = settled.map((s, i) => {
+    if (s.status === 'fulfilled') return s.value;
+    console.warn(`[Solfai] Gemini call ${i} failed: ${s.reason?.message || s.reason}`);
+    return null;
+  });
+
+  // Check if we have at least SOME results to work with
+  const successCount = results.filter(r => r !== null).length;
+  if (successCount === 0) {
+    throw new Error('All AI extraction attempts failed. The image may be too low quality or the AI service may be down.');
+  }
+  console.log(`[Solfai] ${successCount}/${results.length} Gemini calls succeeded`);
 
   // Parse key signature votes (indices 0-3: 2 Pro + 1 Flash + 1 annotated Pro)
   const keyVotes = [];
   for (let i = 0; i < 4; i++) {
+    if (!results[i]) continue;
     try {
       const ks = JSON.parse(results[i]);
       const flatCount = Number(ks.flat_count) || 0;
       const sharpCount = Number(ks.sharp_count) || 0;
-      // 0,1 = Pro, 2 = Flash, 3 = Pro (annotated)
       const weight = i === 2 ? WEIGHT_FLASH : WEIGHT_PRO;
       keyVotes.push({ flatCount, sharpCount, weight, confidence: ks.confidence });
     } catch (e) {
@@ -1432,6 +1451,7 @@ For SATB: Soprano=top treble staff stems up, Alto=bottom treble stems down, Teno
   // Parse full extraction results (indices 4-6)
   const fullExtractions = [];
   for (let i = 4; i < 7; i++) {
+    if (!results[i]) { fullExtractions.push({}); continue; }
     try {
       fullExtractions.push(JSON.parse(results[i]));
     } catch (e) {
@@ -1443,9 +1463,9 @@ For SATB: Soprano=top treble staff stems up, Alto=bottom treble stems down, Teno
   // Parse starting pitch votes (indices 7-10: 2 Pro + 1 Flash + 1 zoomed Pro)
   const pitchVotes = [];
   for (let i = 7; i < 11; i++) {
+    if (!results[i]) continue;
     try {
       const pd = JSON.parse(results[i]);
-      // 7,8 = Pro, 9 = Flash, 10 = Pro (zoomed)
       const weight = i === 9 ? WEIGHT_FLASH : WEIGHT_PRO;
       pitchVotes.push({ value: pd.pitch, weight, lineOrSpace: pd.line_or_space, whichNum: pd.which_line_or_space });
     } catch (e) {
