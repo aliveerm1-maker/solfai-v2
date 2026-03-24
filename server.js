@@ -141,21 +141,26 @@ const ANALYZE_SCHEMA = {
 // Dedicated key signature extraction schema (simpler, focused)
 const KEY_SIG_SCHEMA = {
   type: "OBJECT",
+  description: "CRITICAL: flat_count and sharp_count are MUTUALLY EXCLUSIVE. A key signature has EITHER flats OR sharps, NEVER BOTH. If you see 3 flats: flat_count=3, sharp_count=0. If you see 2 sharps: flat_count=0, sharp_count=2. Setting both to non-zero is ALWAYS wrong.",
   properties: {
     flat_count: {
       type: "INTEGER",
-      description: "Number of flat symbols (♭) between the clef and time signature. 0 if none."
+      description: "Number of flat symbols (♭) between the clef and time signature. MUST be 0 if sharp_count > 0."
     },
     sharp_count: {
       type: "INTEGER",
-      description: "Number of sharp symbols (♯) between the clef and time signature. 0 if none."
+      description: "Number of sharp symbols (♯) between the clef and time signature. MUST be 0 if flat_count > 0."
     },
     confidence: {
       type: "STRING",
       enum: ["certain", "likely", "uncertain"]
+    },
+    reasoning: {
+      type: "STRING",
+      description: "Describe what you see step by step. Example: 'I see a flat on the B line, a flat on the E space, a flat on the A line = 3 flats total. No sharps visible.'"
     }
   },
-  required: ["flat_count", "sharp_count", "confidence"]
+  required: ["flat_count", "sharp_count", "confidence", "reasoning"]
 };
 
 // Dedicated starting pitch schema
@@ -509,33 +514,45 @@ function lookupPiece(title, composer) {
   return bestMatch;
 }
 
-function resolveKeyFromCounts(flatCount, sharpCount, geminiKey) {
+function resolveKeyFromCounts(flatCount, sharpCount, keySignatureVotes = []) {
   let code;
   if (sharpCount > 0) code = `${sharpCount}s`;
   else if (flatCount > 0) code = `${flatCount}b`;
   else code = '0';
 
   const entry = KEY_FROM_COUNT[code];
-  if (!entry) return { key: geminiKey || 'Unknown', confident: false };
+  if (!entry) {
+    // Fallback: use weighted vote directly
+    const voted = weightedVote(keySignatureVotes.map(v => ({ value: v.key_signature, weight: v.weight })));
+    return { key: voted || 'Unknown', confident: false, geminiSaid: voted, codeSaid: 'Unknown' };
+  }
 
-  const geminiSaysMinor = (geminiKey || '').toLowerCase().includes('minor');
-  const geminiMatchesExpectedMinor = geminiSaysMinor &&
-    (geminiKey || '').toLowerCase().replace(/\s+/g, '') === entry.minor.toLowerCase().replace(/\s+/g, '');
+  // Count weighted votes for minor vs major across ALL extractions
+  let minorWeight = 0, majorWeight = 0, totalWeight = 0;
+  for (const v of keySignatureVotes) {
+    const isMinor = (v.key_signature || '').toLowerCase().includes('minor');
+    totalWeight += v.weight;
+    if (isMinor) minorWeight += v.weight;
+    else majorWeight += v.weight;
+  }
 
-  const keyName = geminiMatchesExpectedMinor ? entry.minor : entry.major;
+  // Weighted majority rules. Tie or no votes → default to major (safer for 0 accidentals)
+  const minorRatio = totalWeight > 0 ? minorWeight / totalWeight : 0;
+  const keyName = (totalWeight > 0 && minorRatio >= 0.5) ? entry.minor : entry.major;
 
   const accLabel = sharpCount > 0 ? `${sharpCount} sharp${sharpCount > 1 ? 's' : ''}` :
     flatCount > 0 ? `${flatCount} flat${flatCount > 1 ? 's' : ''}` : 'no sharps or flats';
 
-  const confident = geminiKey && (
-    geminiKey.toLowerCase().replace(/\s+/g, '') === keyName.toLowerCase().replace(/\s+/g, '')
-  );
+  // Confident if there's at least a 60/40 split in votes
+  const confident = totalWeight > 0 && Math.abs(minorWeight - majorWeight) / totalWeight > 0.2;
+
+  console.log(`[Solfai] Major/minor vote: ${Math.round(minorRatio * 100)}% minor → ${keyName}`);
 
   return {
     key: `${keyName} (${accLabel})`,
-    confident: !!confident,
-    geminiSaid: geminiKey,
+    confident,
     codeSaid: keyName,
+    minorVoteRatio: minorRatio,
   };
 }
 
@@ -556,6 +573,33 @@ function weightedVote(votes) {
     if (!best || entry.totalWeight > best.totalWeight) best = entry;
   }
   return best ? best.value : null;
+}
+
+// Returns the winner AND the confidence margin (0.5=tie, 1.0=unanimous)
+function weightedVoteWithMargin(votes) {
+  const tally = {};
+  for (const { value, weight } of votes) {
+    if (value == null || value === '' || value === undefined) continue;
+    const key = String(value).trim().toLowerCase();
+    if (!tally[key]) tally[key] = { value: String(value).trim(), totalWeight: 0, count: 0 };
+    tally[key].totalWeight += weight;
+    tally[key].count++;
+  }
+
+  const sorted = Object.values(tally).sort((a, b) => b.totalWeight - a.totalWeight);
+  if (!sorted.length) return { value: null, margin: 0, isUnanimous: false, isTie: false };
+
+  const totalWeight = sorted.reduce((s, e) => s + e.totalWeight, 0);
+  const margin = totalWeight > 0 ? sorted[0].totalWeight / totalWeight : 0;
+
+  return {
+    value: sorted[0].value,
+    margin,                       // 0.5 = pure tie, 1.0 = unanimous
+    isUnanimous: margin > 0.99,
+    isTie: sorted.length > 1 && Math.abs(sorted[0].totalWeight - sorted[1].totalWeight) < 0.01,
+    runnerUp: sorted[1]?.value || null,
+    runnerUpMargin: totalWeight > 0 ? (sorted[1]?.totalWeight || 0) / totalWeight : 0,
+  };
 }
 
 // ─── Enharmonic Equivalence ───────────────────────────────
@@ -803,13 +847,24 @@ function validateAndFixNotes(measures, tonic, voicePart) {
       }
 
       // Fix 2: Key signature accidental enforcement
+      // ONLY apply if neighbors are diatonic — a natural surrounded by diatonic notes is likely a misread.
+      // If surrounded by non-diatonic notes, the natural is likely intentional (Picardy third, borrowed chord, etc.)
       const reParsed = Note.get(n);
       if (!reParsed.acc && keyAccidentals[reParsed.letter]) {
-        const corrected = reParsed.letter + keyAccidentals[reParsed.letter] + reParsed.oct;
-        const corrMidi = Note.midi(corrected);
-        if (corrMidi && corrMidi >= range.low - 5 && corrMidi <= range.high + 5) {
-          n = corrected;
-          corrections++;
+        const prevRaw = i > 0 ? m.notes[i - 1] : null;
+        const nextRaw = i < m.notes.length - 1 ? m.notes[i + 1] : null;
+        const prevDiatonic = !prevRaw || prevRaw === '[?]' || diatonicPCs.has(Note.get(prevRaw).pc);
+        const nextDiatonic = !nextRaw || nextRaw === '[?]' || diatonicPCs.has(Note.get(nextRaw).pc);
+
+        // Only auto-correct if BOTH neighbors are diatonic (isolated natural = likely misread)
+        // If a neighbor is also non-diatonic, this is likely borrowed chord territory — leave it alone
+        if (prevDiatonic && nextDiatonic) {
+          const corrected = reParsed.letter + keyAccidentals[reParsed.letter] + reParsed.oct;
+          const corrMidi = Note.midi(corrected);
+          if (corrMidi && corrMidi >= range.low - 5 && corrMidi <= range.high + 5) {
+            n = corrected;
+            corrections++;
+          }
         }
       }
 
@@ -1076,8 +1131,23 @@ async function preprocessForGemini(base64Data, mode = 'full') {
         .grayscale()
         .normalise()
         .sharpen({ sigma: 2.5 })
-        .threshold(175)
+        .threshold()  // Otsu's method — automatically finds optimal threshold from histogram
         .jpeg({ quality: 97 });
+    } else if (mode === 'key_region_extreme') {
+      // 7x zoom into ONLY the key signature zone for desperate retries (left 18% x top 15%)
+      const meta = await sharp(buf).metadata();
+      pipeline = sharp(buf)
+        .extract({
+          left: Math.floor(meta.width * 0.03),
+          top: Math.floor(meta.height * 0.01),
+          width: Math.floor(meta.width * 0.18),
+          height: Math.floor(meta.height * 0.15)
+        })
+        .resize({ width: 2400 })  // extreme zoom
+        .grayscale()
+        .linear(2.0, -50)         // aggressive contrast boost before thresholding
+        .threshold()              // Otsu
+        .jpeg({ quality: 99 });
     } else if (mode === 'first_system') {
       // Crop to first ~30% of height for starting pitch detection
       const meta = await sharp(buf).metadata();
@@ -1091,22 +1161,23 @@ async function preprocessForGemini(base64Data, mode = 'full') {
         .grayscale()
         .normalise()
         .sharpen({ sigma: 2.0 })
-        .threshold(170)
+        .threshold()  // Otsu
         .jpeg({ quality: 96 });
     } else if (mode === 'binarize') {
       pipeline = sharp(buf)
         .grayscale()
         .normalise()
         .sharpen({ sigma: 2.0 })
-        .threshold(160)
+        .threshold()  // Otsu
         .jpeg({ quality: 95 });
     } else if (mode === 'high_contrast') {
-      // Maximum contrast for difficult images
+      // Maximum contrast for difficult images — linear boost then Otsu
       pipeline = sharp(buf)
         .grayscale()
         .normalise()
+        .linear(1.8, -40)  // boost contrast before threshold
         .sharpen({ sigma: 3.0 })
-        .threshold(150)
+        .threshold()       // Otsu on boosted image
         .jpeg({ quality: 97 });
     } else if (mode === 'annotated') {
       // Red semi-transparent rectangle overlay on key signature area (top-left 35% x 22%)
@@ -1494,19 +1565,24 @@ async function handleAnalyze(res, apiKey, imageParts, part, rawBase64, pdfPages)
   // ═══ PHASE 3: Dedicated starting pitch extraction (3 reads) ═══
   // All phases run IN PARALLEL for speed
 
-  const keySigPrompt = `You are an expert music engraver. Count the accidentals between the CLEF SYMBOL and the TIME SIGNATURE.
-These symbols define the key signature:
-- Flat (♭): looks like a lowercase 'b' — count each one
-- Sharp (♯): looks like a hash/pound '#' — count each one
-- Do NOT count accidentals that appear before individual notes in the music
-- Do NOT count naturals (♮)
+  const keySigPrompt = `You are an expert music engraver identifying the key signature.
+
+KEY SIGNATURE ZONE: The symbols between the CLEF SYMBOL and the TIME SIGNATURE numbers.
+- Flats (♭): curved 'b' shapes — they appear in order: B, E, A, D, G, C, F
+- Sharps (♯): hash '#' shapes — they appear in order: F, C, G, D, A, E, B
+- Do NOT count accidentals before individual notes
+- Do NOT count natural signs (♮)
+- Do NOT count clef symbols themselves
 - IGNORE any watermark text overlaid on the music
 
-PROCEDURE:
-1. Find the clef symbol (treble clef 𝄞 or bass clef 𝄢) at the left edge of the first staff
-2. Look immediately to the RIGHT of the clef
-3. Count ONLY the flat or sharp symbols BEFORE the time signature numbers
-4. Report the exact count`;
+SHOW YOUR WORK — reason step by step before answering:
+Step 1: Find the clef symbol at the far left of the first staff.
+Step 2: Scan to the right until you reach the time signature (two stacked numbers like 4/4 or 3/4).
+Step 3: List every accidental symbol in that zone, one by one. Example: "I see flat on B-line, flat on E-space, flat on A-line = 3 flats total"
+Step 4: Verify it matches a real key signature. 3 flats = Eb major / C minor. 2 sharps = D major / B minor.
+Step 5: Report your counts. Write your step-by-step reasoning in the "reasoning" field.
+
+CRITICAL: flat_count and sharp_count are MUTUALLY EXCLUSIVE. A key signature has EITHER flats OR sharps, NEVER both. If you see 3 flats: flat_count=3, sharp_count=0. If you see 2 sharps: flat_count=0, sharp_count=2.`;
 
   const fullExtractPrompt = `You are an expert music engraver and choir director reading sheet music with extreme precision.
 
@@ -1514,32 +1590,45 @@ CRITICAL RULES:
 - If any image is a title/cover page with no staves or notes, SKIP IT and look at the next image.
 - Count accidentals (flats ♭ or sharps ♯) that appear between the clef symbol and the time signature. These define the key signature.
 - Do NOT count accidentals before individual notes (those are accidentals, not key signature).
-- SATB voice identification: Soprano=top treble staff, stems up. Alto=bottom treble staff, stems down. Tenor=treble-8 clef or bass clef, stems up. Bass=bass clef, stems down.
-- KEY SIGNATURE BIAS: When ambiguous, strongly prefer major. Most choral music is major.
+- SATB STAFF IDENTIFICATION — before reading any notes, follow this procedure:
+  Step 1: Count staves in the first system top to bottom. Identify each clef: treble (spiral curl) = higher voice; bass (dotted C) = lower voice; treble-8 (spiral with "8" below) = Tenor.
+  Step 2: For each treble staff, check stem direction of the first few notes. Stems UP = higher voice (Soprano on top treble, or Tenor on treble-8). Stems DOWN = lower voice (Alto on bottom treble, or Bass on bass staff).
+  Step 3: Verify the identified staff has LYRICS underneath it (vocal parts always have text below notes).
+  Step 4: For grand-staff accompaniment (piano), IGNORE those staves entirely — read only vocal staves.
+  Result: Soprano=top treble stems up, Alto=bottom treble stems down, Tenor=treble-8 stems up OR bass staff stems up, Bass=bass staff stems down.
+- MAJOR vs MINOR — determine from visual evidence only. Do NOT apply a bias toward major. Check in order:
+  1. Look for the word "minor", "moll", "mineur", "mol", or "min." in the tempo marking or title text
+  2. Check if the 7th degree appears raised as a leading tone (e.g., G# in A minor) → likely minor
+  3. Check if the final chord has a raised 3rd vs the key (Picardy third) → piece is minor
+  4. Look at overall melodic character — minor keys have frequent half-steps near the tonic
+  5. Only if ALL above are inconclusive, report as the major key
 
 WATERMARKS — IGNORE COMPLETELY:
 - Diagonal or translucent text like "For perusal purposes only", "Preview copy", etc.
 - Look THROUGH watermark text to read the actual notes beneath it.
 
 STARTING PITCH — TREBLE CLEF:
-Lines bottom→top: E4, G4, B4, D5, F5 (Every Good Boy Does Fine).
-Spaces bottom→top: F4, A4, C5, E5 (FACE).
-- A note ON a line: line passes through center of note head.
-- A note IN a space: note head between two lines.
-- Do NOT confuse 3rd line (B4) with 3rd space (C5).
-- Middle C (C4) is on the first ledger line below treble staff.
-- Treble-8 clef (tenor): ALL pitches one octave lower.
+Staff lines bottom→top: E4, G4, B4, D5, F5.
+Staff spaces bottom→top: F4, A4, C5, E5.
+Ledger lines BELOW treble staff:
+  Space below staff = D4. First ledger line below = C4 (MIDDLE C). Space below that = B3. Second ledger line below = A3.
+  *** CRITICAL: Middle C (C4) is in the SPACE below the first ledger line, NOT on the line. The line through D4, the space below it is C4. ***
+Ledger lines ABOVE treble staff:
+  Space above top line = G5. First ledger line above = A5. Space above that = B5. Second ledger line above = C6.
+Treble-8 clef (tenor voice, has "8" below spiral): subtract one octave from ALL pitches listed above.
 
 STARTING PITCH — BASS CLEF:
-Lines bottom→top: G2, B2, D3, F3, A3. Spaces: A2, C3, E3, G3.
-Middle C (C4) is on the first ledger line above bass staff.
+Staff lines bottom→top: G2, B2, D3, F3, A3. Spaces: A2, C3, E3, G3.
+Ledger lines ABOVE bass staff:
+  Space above top line = B3. First ledger line above = C4 (MIDDLE C). Space above that = D4. Second ledger line above = E4.
 
 STARTING PITCH PROCEDURE:
 1. Find vocal staff (has lyrics underneath). Skip piano intro measures.
 2. Find VERY FIRST note with a lyric syllable below it.
-3. Is the note head ON a line or IN a space? Count from bottom: which line (1-5) or space (1-4)?
-4. Look up the pitch from the reference above.
-5. Double-check: is it within vocal range? Soprano C4-G5, Alto G3-E5, Tenor C3-A4, Bass E2-E4.`;
+3. Is the note head ON a line (line passes through its center) or IN a space (floats between lines with no line through it)?
+4. Count from the bottom: which line (1-5) or space (1-4)?
+5. Look up the pitch from the reference above.
+6. Double-check: is it within vocal range? Soprano C4-G5, Alto G3-E5, Tenor C3-A4, Bass E2-E4.`;
 
   const pitchPrompt = `You are a music reading specialist. Your ONLY task is to identify the FIRST SUNG NOTE.
 
@@ -1547,17 +1636,23 @@ STEP BY STEP:
 1. Find the vocal staff — the staff with lyrics (text syllables) underneath the notes.
 2. SKIP any piano/organ introduction measures. Look for where the TEXT starts.
 3. The very first note that has a lyric syllable below it is the starting pitch.
-4. Determine if this note is ON a staff line (line goes through the note head center) or IN a space (note head sits between two lines).
-5. Count from the bottom: which line (1=E4, 2=G4, 3=B4, 4=D5, 5=F5) or which space (1=F4, 2=A4, 3=C5, 4=E5).
+4. Determine if the note head is ON a line (line passes through its center) or IN a space (no line through it — floats between two lines). This is the most critical distinction.
+5. Look up pitch using these EXACT references:
+   TREBLE CLEF lines (1=bottom→5=top): E4, G4, B4, D5, F5
+   TREBLE CLEF spaces (1=bottom→4=top): F4, A4, C5, E5
+   Below treble staff: space below = D4, first ledger line below = C4 (MIDDLE C), space below that = B3
+   *** The first ledger line below treble staff = D4 is ON the line; C4 is IN the space BELOW that line ***
+   BASS CLEF lines: G2, B2, D3, F3, A3. Spaces: A2, C3, E3, G3.
+   Above bass staff: space above = B3, first ledger line above = C4 (MIDDLE C)
 6. Check for any accidental (♯, ♭, ♮) directly before this note.
-7. For treble-8 clef: subtract one octave from all pitches.
-8. For bass clef: Lines 1=G2, 2=B2, 3=D3, 4=F3, 5=A3. Spaces 1=A2, 2=C3, 3=E3, 4=G3.
+7. For treble-8 clef: subtract one octave from all pitches above.
 
-COMMON MISTAKES TO AVOID:
-- Confusing 3rd line (B4) with 3rd space (C5) — they look similar but are different pitches
-- Reading piano notes instead of vocal notes
+CRITICAL MISTAKES TO AVOID:
+- Middle C (C4) is in the SPACE below the first ledger line below treble clef. If you see a note floating below a small line with no line through it = C4, NOT D4.
+- Confusing 3rd staff line (B4) with 3rd staff space (C5) — these are adjacent and easy to confuse
+- Reading piano/accompaniment notes instead of the vocal part
 - Missing a key signature accidental that applies to this note
-- Wrong octave number
+- Off-by-one octave errors: always double-check against vocal range (Soprano C4-G5, Alto G3-E5, Tenor C3-A4, Bass E2-E4)
 
 For SATB: Soprano=top treble staff stems up, Alto=bottom treble stems down, Tenor=treble-8/bass stems up, Bass=bottom bass stems down.`;
 
@@ -1632,17 +1727,31 @@ For SATB: Soprano=top treble staff stems up, Alto=bottom treble stems down, Teno
     if (!results[i]) continue;
     try {
       const ks = JSON.parse(results[i]);
+      // Enforce mutual exclusion — flats and sharps can never both be non-zero
+      if (Number(ks.flat_count) > 0 && Number(ks.sharp_count) > 0) {
+        console.warn(`[Solfai] Impossible key sig (${ks.flat_count}b + ${ks.sharp_count}s) — keeping higher count, zeroing the other`);
+        if (Number(ks.flat_count) >= Number(ks.sharp_count)) ks.sharp_count = 0;
+        else ks.flat_count = 0;
+      }
+      if (ks.reasoning) console.log(`[Solfai] Key sig reasoning (read ${i+1}): ${ks.reasoning}`);
       keyVotes.push({ flatCount: Number(ks.flat_count) || 0, sharpCount: Number(ks.sharp_count) || 0, weight, confidence: ks.confidence });
     } catch (e) {
       console.warn(`[Solfai] Key sig read ${i + 1} parse failed`);
     }
   }
 
-  // Weighted vote on flat/sharp counts
-  const flatCountWinner = weightedVote(keyVotes.map(v => ({ value: v.flatCount, weight: v.weight })));
-  const sharpCountWinner = weightedVote(keyVotes.map(v => ({ value: v.sharpCount, weight: v.weight })));
-  const votedFlats = Number(flatCountWinner) || 0;
-  const votedSharps = Number(sharpCountWinner) || 0;
+  // Vote the (flatCount, sharpCount) PAIR — they are mutually exclusive in music.
+  // Voting them independently can produce impossible combos like "2 flats AND 3 sharps".
+  // Also scale each vote's weight by Gemini's reported confidence.
+  const pairVotes = keyVotes.map(v => {
+    const confMult = v.confidence === 'certain' ? 1.5 : v.confidence === 'uncertain' ? 0.6 : 1.0;
+    const effectiveWeight = v.weight * confMult;
+    const pairKey = v.sharpCount > 0 ? `${v.sharpCount}s` : v.flatCount > 0 ? `${v.flatCount}b` : '0';
+    return { value: pairKey, weight: effectiveWeight };
+  });
+  const winningPair = weightedVote(pairVotes); // e.g. "3b", "2s", "0"
+  const votedFlats = (winningPair && winningPair.endsWith('b')) ? parseInt(winningPair) : 0;
+  const votedSharps = (winningPair && winningPair.endsWith('s')) ? parseInt(winningPair) : 0;
 
   console.log(`[Solfai] Key votes: ${keyVotes.map(v => `${v.flatCount}b/${v.sharpCount}s`).join(', ')} → ${votedFlats}b/${votedSharps}s`);
 
@@ -1710,21 +1819,25 @@ For SATB: Soprano=top treble staff stems up, Alto=bottom treble stems down, Teno
     weight: i < 2 ? WEIGHT_PRO : WEIGHT_FLASH,
   }));
 
-  // Combine dedicated key reads with full extraction key reads
+  // Combine dedicated key reads with full extraction key reads, vote as pairs
   const allKeyVotes = [...keyVotes, ...fullKeyVotes];
-  const finalFlats = Number(weightedVote(allKeyVotes.map(v => ({ value: v.flatCount, weight: v.weight })))) || 0;
-  const finalSharps = Number(weightedVote(allKeyVotes.map(v => ({ value: v.sharpCount, weight: v.weight })))) || 0;
+  const allPairVotes = allKeyVotes.map(v => {
+    const pairKey = v.sharpCount > 0 ? `${v.sharpCount}s` : v.flatCount > 0 ? `${v.flatCount}b` : '0';
+    return { value: pairKey, weight: v.weight };
+  });
+  const finalPair = weightedVote(allPairVotes);
+  const finalFlats = (finalPair && finalPair.endsWith('b')) ? parseInt(finalPair) : 0;
+  const finalSharps = (finalPair && finalPair.endsWith('s')) ? parseInt(finalPair) : 0;
 
   console.log(`[Solfai] Combined key votes (${allKeyVotes.length} total): ${finalFlats}b/${finalSharps}s`);
 
-  // Code-calculated key from voted flat/sharp count
-  const geminiKeyVote = weightedVote(
-    fullExtractions.map((ext, i) => ({
-      value: ext.key_signature,
-      weight: i < 2 ? WEIGHT_PRO : WEIGHT_FLASH,
-    }))
-  );
-  const keyResult = resolveKeyFromCounts(finalFlats, finalSharps, geminiKeyVote);
+  // Code-calculated key from voted flat/sharp count.
+  // Pass ALL fullExtraction votes so resolveKeyFromCounts can do weighted major/minor decision.
+  const keySignatureVotes = fullExtractions.map((ext, i) => ({
+    key_signature: ext.key_signature,
+    weight: i === 0 ? WEIGHT_PRO : WEIGHT_FLASH,
+  }));
+  const keyResult = resolveKeyFromCounts(finalFlats, finalSharps, keySignatureVotes);
 
   // Apply cached corrections
   let finalKey = cached?.keySignature || keyResult.key;
@@ -1751,25 +1864,33 @@ For SATB: Soprano=top treble staff stems up, Alto=bottom treble stems down, Teno
   }
 
   // ═══ CONFIDENCE-WEIGHTED RETRY ═══
-  // If key or pitch confidence is low, retry with a specialized prompt
-  const keyConfidenceRatio = keyVotes.length > 0
-    ? keyVotes.filter(v => v.flatCount === votedFlats && v.sharpCount === votedSharps).length / keyVotes.length
-    : 0;
-  const pitchConfidenceRatio = pitchGroups.length > 0
-    ? pitchGroups[0].totalWeight / pitchVotes.reduce((s, v) => s + v.weight, 0)
-    : 0;
+  // Use real weighted margin (0.5=tie, 1.0=unanimous) instead of count equality
+  const keyVoteResult = weightedVoteWithMargin(pairVotes);
+  const keyConfidenceRatio = keyVoteResult.margin; // 1.0 = all agree, 0.5 = tie
+  const pitchVoteResult = weightedVoteWithMargin(pitchVotes.map(v => ({ value: v.value, weight: v.weight })));
+  const pitchConfidenceRatio = pitchVoteResult.margin;
+
+  console.log(`[Solfai] Key confidence: ${Math.round(keyConfidenceRatio * 100)}% (${keyVoteResult.isUnanimous ? 'unanimous' : keyVoteResult.isTie ? 'TIE' : 'majority'})`);
+  console.log(`[Solfai] Pitch confidence: ${Math.round(pitchConfidenceRatio * 100)}%`);
 
   // Retry key if < 70% agreement and we have image data
   if (keyConfidenceRatio < 0.7 && firstJpeg) {
-    console.log(`[Solfai] Low key confidence (${Math.round(keyConfidenceRatio * 100)}%), retrying with high_contrast...`);
+    // Below 50% confidence = tie → use extreme zoom; otherwise high_contrast is enough
+    const retryMode = keyConfidenceRatio < 0.55 ? 'key_region_extreme' : 'high_contrast';
+    console.log(`[Solfai] Low key confidence (${Math.round(keyConfidenceRatio * 100)}%), retrying with ${retryMode}...`);
     try {
-      const hcData = await preprocessForGemini(firstJpeg.inlineData.data, 'high_contrast');
+      const hcData = await preprocessForGemini(firstJpeg.inlineData.data, retryMode);
       const retryResult = await callGemini(apiKey, keySigPrompt,
-        [{ text: 'CRITICAL RETRY: Count the key signature accidentals very carefully. This is a tie-breaker read.' },
+        [{ text: 'CRITICAL RETRY: Show your work step by step. Count every accidental carefully. This is a tie-breaker read.' },
          { inlineData: { mimeType: 'image/jpeg', data: hcData } }],
-        { temperature: 0, maxOutputTokens: 128, responseSchema: KEY_SIG_SCHEMA, thinkingBudget: 6000 }
+        { temperature: 0, maxOutputTokens: 256, responseSchema: KEY_SIG_SCHEMA, thinkingBudget: 8000 }
       );
       const retryKs = JSON.parse(retryResult);
+      if (retryKs.reasoning) console.log(`[Solfai] Retry reasoning: ${retryKs.reasoning}`);
+      if (Number(retryKs.flat_count) > 0 && Number(retryKs.sharp_count) > 0) {
+        if (Number(retryKs.flat_count) >= Number(retryKs.sharp_count)) retryKs.sharp_count = 0;
+        else retryKs.flat_count = 0;
+      }
       keyVotes.push({ flatCount: Number(retryKs.flat_count) || 0, sharpCount: Number(retryKs.sharp_count) || 0, weight: WEIGHT_PRO, confidence: retryKs.confidence });
       // Re-vote with the extra data
       const reFlatWinner = weightedVote(keyVotes.map(v => ({ value: v.flatCount, weight: v.weight })));
@@ -1803,29 +1924,57 @@ For SATB: Soprano=top treble staff stems up, Alto=bottom treble stems down, Teno
     console.warn(`[Solfai] Warning: ${startDegreeWarning}`);
   }
 
-  // ═══ CROSS-VALIDATE last note (should also be Do or Sol) ═══
+  // ═══ CROSS-VALIDATE last note — 3-way vote with confidence gate ═══
   let lastNoteWarning = null;
   let lastNotePitch = null;
   try {
     const lastNotePrompt = `You are a music reading specialist. Find the VERY LAST SUNG NOTE in the ${part} vocal part.
-Look at the final measure of the piece. The last note is the one just before the final barline (double barline).
+Look at the FINAL measure — the measure just before the double barline at the end of the piece.
+TREBLE CLEF: Lines bottom→top E4 G4 B4 D5 F5. Spaces F4 A4 C5 E5. Middle C (C4) = space below first ledger line below staff.
+BASS CLEF: Lines G2 B2 D3 F3 A3. Spaces A2 C3 E3 G3. Middle C (C4) = first ledger line above bass staff.
 For SATB: Soprano=top treble stems up, Alto=bottom treble stems down, Tenor=treble-8/bass stems up, Bass=bottom bass stems down.
-TREBLE CLEF: Lines E4 G4 B4 D5 F5. Spaces F4 A4 C5 E5.
-BASS CLEF: Lines G2 B2 D3 F3 A3. Spaces A2 C3 E3 G3.`;
-    const lastNoteRaw = await callGemini(apiKey, lastNotePrompt,
-      [{ text: `Find the last sung note for ${part}.` }, ...processedParts.slice(0, 2)],
-      { temperature: 0, maxOutputTokens: 128, responseSchema: LAST_NOTE_SCHEMA, thinkingBudget: 4000 }
-    );
-    const lastNoteData = JSON.parse(lastNoteRaw);
-    lastNotePitch = lastNoteData.pitch;
-    if (lastNotePitch) {
+Step 1: Find the double barline at the very end.
+Step 2: The note immediately before it is the last sung note.
+Step 3: Is the note head ON a line or IN a space? Count from bottom.
+Step 4: Apply any key signature accidentals.`;
+
+    // 3-way vote: 2x Pro + 1x Flash
+    const [lastRead1, lastRead2, lastRead3] = await Promise.allSettled([
+      callGemini(apiKey, lastNotePrompt,
+        [{ text: `Find last sung note for ${part}. Think carefully.` }, ...processedParts.slice(0, 2)],
+        { temperature: 0, maxOutputTokens: 128, responseSchema: LAST_NOTE_SCHEMA, thinkingBudget: 6000 }),
+      callGemini(apiKey, lastNotePrompt,
+        [{ text: `Independent read — find last sung note for ${part}.` }, ...processedParts.slice(0, 2)],
+        { temperature: 0, maxOutputTokens: 128, responseSchema: LAST_NOTE_SCHEMA, thinkingBudget: 4000 }),
+      callGemini(apiKey, lastNotePrompt,
+        [{ text: `Find last sung note for ${part}.` }, ...processedParts.slice(0, 1)],
+        { model: GEMINI_FLASH, temperature: 0, maxOutputTokens: 128, responseSchema: LAST_NOTE_SCHEMA, thinkingBudget: 0 }),
+    ]);
+
+    const lastNoteVotes = [];
+    for (const [idx, settled] of [[0, lastRead1], [1, lastRead2], [2, lastRead3]]) {
+      if (settled.status !== 'fulfilled') continue;
+      try {
+        const d = JSON.parse(settled.value);
+        if (d.pitch) lastNoteVotes.push({ value: d.pitch, weight: idx < 2 ? WEIGHT_PRO : WEIGHT_FLASH });
+      } catch(e) {}
+    }
+
+    const lastNoteVoteResult = weightedVoteWithMargin(lastNoteVotes);
+    lastNotePitch = lastNoteVoteResult.value;
+    console.log(`[Solfai] Last note votes: ${lastNoteVotes.map(v=>v.value).join(', ')} → ${lastNotePitch} (${Math.round(lastNoteVoteResult.margin * 100)}% confidence)`);
+
+    // Only cross-validate if 60%+ of weighted votes agree — below that the reads disagree too much
+    if (lastNotePitch && lastNoteVoteResult.margin >= 0.6) {
       const lastDegree = noteToScaleDegree(lastNotePitch.replace(/\d+$/, ''), tonic);
       if (lastDegree !== null && ![1, 5].includes(lastDegree)) {
         lastNoteWarning = `Last note ${lastNotePitch} is scale degree ${lastDegree} in ${tonic} — expected Do(1) or Sol(5). Verify ending.`;
         console.warn(`[Solfai] Warning: ${lastNoteWarning}`);
       } else {
-        console.log(`[Solfai] Last note ${lastNotePitch} is scale degree ${lastDegree} in ${tonic} — valid ending.`);
+        console.log(`[Solfai] Last note ${lastNotePitch} is scale degree ${lastDegree} in ${tonic} — valid ending ✓`);
       }
+    } else if (lastNoteVoteResult.margin < 0.6) {
+      console.warn(`[Solfai] Last note reads disagree (${Math.round(lastNoteVoteResult.margin * 100)}% agreement) — skipping cross-validation to avoid false warnings`);
     }
   } catch (e) {
     console.warn('[Solfai] Last note cross-validation failed:', e.message);
@@ -1993,6 +2142,56 @@ function buildTextSummary(s, part) {
   ].filter(Boolean).join('\n');
 }
 
+// ─── Interval Plausibility Check ──────────────────────────
+// After reconciliation, any leap > major 10th (16 semitones) in choral music
+// is almost certainly an octave misread. Attempt to correct by moving the note
+// one octave in the direction that minimizes the jump.
+function fixLargeIntervalErrors(measures, voicePart) {
+  const range = VOCAL_RANGES[voicePart] || VOCAL_RANGES['Soprano'];
+  const MAX_LEAP = 16; // major 10th — impossible in normal choral writing
+  let fixes = 0;
+
+  for (const m of measures) {
+    if (!m.notes || m.notes.length < 2) continue;
+
+    for (let i = 1; i < m.notes.length; i++) {
+      const prev = m.notes[i - 1];
+      const curr = m.notes[i];
+      if (prev === '[?]' || curr === '[?]') continue;
+
+      const prevMidi = Note.midi(prev);
+      const currMidi = Note.midi(curr);
+      if (prevMidi === null || currMidi === null) continue;
+
+      const jump = Math.abs(currMidi - prevMidi);
+      if (jump > MAX_LEAP) {
+        const currNote = Note.get(curr);
+        const downMidi = currMidi - 12;
+        const upMidi = currMidi + 12;
+        const jumpDown = Math.abs(downMidi - prevMidi);
+        const jumpUp = Math.abs(upMidi - prevMidi);
+
+        let fixed = null;
+        if (jumpDown < jump && jumpDown <= MAX_LEAP && downMidi >= range.low - 5) {
+          fixed = currNote.pc + (currNote.oct - 1);
+        } else if (jumpUp < jump && jumpUp <= MAX_LEAP && upMidi <= range.high + 5) {
+          fixed = currNote.pc + (currNote.oct + 1);
+        }
+
+        if (fixed) {
+          console.log(`[Solfai] Interval fix m${m.num}: ${prev}→${curr} (${jump} semitones) corrected to ${prev}→${fixed}`);
+          m.notes[i] = fixed;
+          if (!m.autoCorrections) m.autoCorrections = [];
+          m.autoCorrections.push({ noteIndex: i, original: curr, corrected: fixed, reason: 'large_interval_octave_fix' });
+          fixes++;
+        }
+      }
+    }
+  }
+
+  return fixes;
+}
+
 // ═══════════════════════════════════════════════════════════
 // SOLFEGE — 5-way extraction + note-by-note reconciliation
 // ═══════════════════════════════════════════════════════════
@@ -2118,8 +2317,14 @@ Rules:
 - IGNORE watermark text completely${keyConstraint}`;
 
   const sysBase = `You are a professional music copyist transcribing choral music with extreme precision.
-Staff #${staffInfo.vocal_staff_number} from the top — ${part} vocal part.
+Target: Staff #${staffInfo.vocal_staff_number} from the top — ${part} vocal part.
 ${clefRef}
+
+STAFF IDENTIFICATION — verify you are on the correct staff before reading notes:
+- Count staves top to bottom in the first system.
+- Check stem direction: stems UP = higher voice (Soprano/Tenor); stems DOWN = lower voice (Alto/Bass).
+- Verify your staff has LYRICS underneath it (vocal staves always have text syllables below notes).
+- If you see a grand staff bracket with no lyrics = piano accompaniment — SKIP IT entirely.
 
 READING PROCEDURE FOR EACH NOTE:
 1. Is the note head ON a line or IN a space?
@@ -2128,6 +2333,12 @@ READING PROCEDURE FOR EACH NOTE:
 4. Check for accidentals directly before the note (♯ ♭ ♮)
 5. Apply key signature accidentals if no natural cancels them
 6. Determine octave number from staff position
+
+TIED NOTES vs REPEATED NOTES — CRITICAL:
+- TIE = curved line connecting two note heads of THE SAME pitch → count as ONE note (combine their durations)
+- SLUR = curved line over DIFFERENT pitches → these are separate notes, count each one
+- REPEAT = same pitch appears twice with no connecting curved line → count twice
+- Rule: if both note heads under a curve are the SAME pitch = tie = output once with combined duration
 
 ${outputFormat}`;
 
@@ -2225,6 +2436,12 @@ ${outputFormat}`;
   const theoryCorrections = validateAndFixNotes(reconciledMeasures, tonic, part);
   if (theoryCorrections > 0) {
     console.log(`[Solfai] Theory validation corrected ${theoryCorrections} notes`);
+  }
+
+  // Step 5b: Interval plausibility sweep — fix residual octave errors that survived voting
+  const intervalFixes = fixLargeIntervalErrors(reconciledMeasures, part);
+  if (intervalFixes > 0) {
+    console.log(`[Solfai] Interval plausibility: corrected ${intervalFixes} large leap(s)`);
   }
 
   // Step 6: Code-calculate solfege, scale degrees, and intervals
