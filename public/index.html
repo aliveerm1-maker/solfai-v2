@@ -616,6 +616,106 @@
     .confidence-badge.medium { background: var(--gold-dim); border: 1px solid rgba(212,168,83,0.2); color: var(--gold); }
     .confidence-badge.low { background: var(--error-dim); border: 1px solid rgba(212,92,92,0.2); color: var(--error); }
 
+    /* ═══ CONFIDENCE METER (circular gauge) ═══ */
+    .confidence-meter {
+      display: flex; align-items: center; gap: 18px; padding: 18px 22px;
+      background: var(--card); border-radius: var(--radius-md); box-shadow: var(--shadow-card);
+      margin-bottom: 20px;
+    }
+    .confidence-ring {
+      position: relative; width: 80px; height: 80px; flex-shrink: 0;
+    }
+    .confidence-ring svg { transform: rotate(-90deg); }
+    .confidence-ring-bg { fill: none; stroke: var(--border); stroke-width: 6; }
+    .confidence-ring-fill {
+      fill: none; stroke-width: 6; stroke-linecap: round;
+      transition: stroke-dashoffset 1.2s cubic-bezier(0.4, 0, 0.2, 1), stroke 0.4s;
+    }
+    .confidence-ring-score {
+      position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+      font-family: 'Cormorant Garamond', serif; font-weight: 700; font-size: 1.4rem; color: var(--text);
+    }
+    .confidence-details { flex: 1; }
+    .confidence-label {
+      font-size: 0.65rem; text-transform: uppercase; letter-spacing: 3px;
+      color: var(--gold); margin-bottom: 6px; font-weight: 500;
+    }
+    .confidence-text { font-size: 0.82rem; color: var(--text2); line-height: 1.5; }
+    .confidence-factors {
+      display: flex; gap: 12px; margin-top: 8px; flex-wrap: wrap;
+    }
+    .confidence-factor {
+      font-size: 0.68rem; padding: 2px 10px; border-radius: 100px;
+      background: var(--card2); color: var(--text2); border: 1px solid var(--border);
+    }
+
+    /* ═══ IMAGE QUALITY WARNING ═══ */
+    .quality-warning {
+      display: flex; align-items: flex-start; gap: 12px; padding: 14px 18px;
+      background: rgba(212,168,83,0.08); border: 1px solid rgba(212,168,83,0.2);
+      border-radius: var(--radius-md); margin-bottom: 16px; font-size: 0.82rem; color: var(--gold);
+    }
+    .quality-warning-icon { font-size: 1.2rem; flex-shrink: 0; margin-top: 1px; }
+
+    /* ═══ MICRO-INTERACTIONS ═══ */
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(12px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes scaleIn {
+      from { opacity: 0; transform: scale(0.95); }
+      to { opacity: 1; transform: scale(1); }
+    }
+    .animate-in { animation: fadeInUp 0.5s var(--transition) both; }
+    .animate-scale { animation: scaleIn 0.35s var(--transition) both; }
+    .info-card { transition: transform 0.25s var(--transition), box-shadow 0.25s var(--transition); }
+    .info-card:hover { transform: translateY(-3px) scale(1.02); box-shadow: var(--shadow-hover); }
+    .tip-card { transition: transform 0.2s var(--transition); }
+    .tip-card:hover { transform: translateX(4px); }
+
+    /* Button ripple */
+    .ripple-btn { position: relative; overflow: hidden; }
+    .ripple-btn .ripple {
+      position: absolute; border-radius: 50%; background: rgba(212,168,83,0.25);
+      transform: scale(0); animation: rippleAnim 0.6s ease-out;
+      pointer-events: none;
+    }
+    @keyframes rippleAnim {
+      to { transform: scale(4); opacity: 0; }
+    }
+
+    /* Multi-step loading progress */
+    .loading-steps {
+      display: flex; gap: 0; margin-top: 18px; width: 100%; max-width: 420px;
+    }
+    .loading-step {
+      flex: 1; text-align: center; position: relative;
+    }
+    .loading-step-dot {
+      width: 10px; height: 10px; border-radius: 50%;
+      background: var(--border); margin: 0 auto 6px;
+      transition: background 0.4s, box-shadow 0.4s;
+    }
+    .loading-step.active .loading-step-dot {
+      background: var(--gold);
+      box-shadow: 0 0 12px rgba(212,168,83,0.5);
+    }
+    .loading-step.done .loading-step-dot {
+      background: var(--success);
+    }
+    .loading-step-label {
+      font-size: 0.62rem; color: var(--muted); text-transform: uppercase; letter-spacing: 1px;
+      transition: color 0.3s;
+    }
+    .loading-step.active .loading-step-label { color: var(--gold); }
+    .loading-step.done .loading-step-label { color: var(--success); }
+    .loading-step-line {
+      position: absolute; top: 5px; left: 50%; width: 100%; height: 2px;
+      background: var(--border); z-index: -1;
+    }
+    .loading-step:last-child .loading-step-line { display: none; }
+    .loading-step.done .loading-step-line { background: var(--success); }
+
     /* ═══ HISTORY PANEL ═══ */
     .side-panel {
       position: fixed; top: 0; width: 400px; height: 100vh;
@@ -1087,7 +1187,14 @@
     <div class="loading" id="loading">
       <div class="spinner"></div>
       <div>Solfai is reading your music...</div>
-      <div class="loading-sub" id="loadingSub">Step 1 of 2: Extracting key, time, pitch &amp; notes...</div>
+      <div class="loading-sub" id="loadingSub">Preprocessing image...</div>
+      <div class="loading-steps" id="loadingSteps">
+        <div class="loading-step active" id="step-upload"><div class="loading-step-dot"></div><div class="loading-step-label">Upload</div><div class="loading-step-line"></div></div>
+        <div class="loading-step" id="step-preprocess"><div class="loading-step-dot"></div><div class="loading-step-label">Preprocess</div><div class="loading-step-line"></div></div>
+        <div class="loading-step" id="step-analyze"><div class="loading-step-dot"></div><div class="loading-step-label">Analyze</div><div class="loading-step-line"></div></div>
+        <div class="loading-step" id="step-validate"><div class="loading-step-dot"></div><div class="loading-step-label">Validate</div><div class="loading-step-line"></div></div>
+        <div class="loading-step" id="step-done"><div class="loading-step-dot"></div><div class="loading-step-label">Done</div></div>
+      </div>
       <div style="margin-top:28px;">
         <div class="skeleton-grid">
           <div class="skeleton skeleton-card"></div>
@@ -1109,8 +1216,10 @@
         <div style="display:flex;align-items:center;gap:10px;">
           <button class="btn-secondary" style="padding:7px 16px;font-size:0.78rem;" onclick="shareAnalysis()" title="Share">&#x1F517; Share</button>
           <button class="btn-secondary" style="padding:7px 16px;font-size:0.78rem;" onclick="exportAsPDF()" title="Print/PDF">&#x1F5A8; Print</button>
+          <button class="btn-secondary" style="padding:7px 16px;font-size:0.78rem;" onclick="exportMusicXML()" id="exportMusicXMLBtn" style="display:none;" title="Export MusicXML">&#x1F3BC; MusicXML</button>
           <button class="btn-secondary" style="padding:7px 16px;font-size:0.78rem;" onclick="extractLyrics()" id="extractLyricsBtn">&#x1F4DC; Extract Lyrics</button>
           <button class="btn-secondary" style="padding:7px 16px;font-size:0.78rem;" onclick="loadHistoricalContext()" id="historicalContextBtn">&#x1F4DA; Historical Context</button>
+          <button class="btn-secondary" style="padding:7px 16px;font-size:0.78rem;" onclick="getPracticeCoach()" id="practiceCoachBtn">&#x1F9D1;&#x200D;&#x1F3EB; Coach Tips</button>
           <div style="font-size:0.68rem;color:var(--muted);font-weight:300;">hover to edit</div>
         </div>
       </div>
@@ -1167,6 +1276,7 @@
           <button class="btn-secondary" onclick="breakdownSections()" id="sectionBreakdownBtn" style="display:none;padding:7px 16px;font-size:0.78rem;">&#x1F4C4; Sections</button>
           <button class="btn-secondary" onclick="showCapoModal()" id="capoBtn" style="display:none;padding:7px 16px;font-size:0.78rem;">&#x1F3B8; Capo</button>
           <button class="btn-secondary" onclick="startAuditionPrep()" id="auditionPrepBtn" style="padding:7px 16px;font-size:0.78rem;">&#x1F3AF; Audition Prep</button>
+          <button class="btn-secondary" onclick="showEnsembleView()" id="ensembleViewBtn" style="padding:7px 16px;font-size:0.78rem;">&#x1F3B5; SATB View</button>
         </div>
         <div id="fullPieceProgress" style="display:none;margin-bottom:12px;">
           <div style="height:4px;background:var(--card2);border-radius:2px;overflow:hidden;">
@@ -1686,6 +1796,20 @@ function handleFile(file) {
 // ═══════════════════════════════════════════════════════════════
 // ANALYZE
 // ═══════════════════════════════════════════════════════════════
+function setLoadingStep(stepId) {
+  const steps = ['step-upload', 'step-preprocess', 'step-analyze', 'step-validate', 'step-done'];
+  const idx = steps.indexOf(stepId);
+  steps.forEach((s, i) => {
+    const el = $(s);
+    if (!el) return;
+    el.classList.remove('active', 'done');
+    if (i < idx) el.classList.add('done');
+    else if (i === idx) el.classList.add('active');
+  });
+  const labels = { 'step-upload': 'Uploading image...', 'step-preprocess': 'Preprocessing image...', 'step-analyze': 'AI is analyzing your music...', 'step-validate': 'Validating and cross-checking...', 'step-done': 'Analysis complete!' };
+  $('loadingSub').textContent = labels[stepId] || '';
+}
+
 analyzeBtn.addEventListener('click', async () => {
   if (musicxmlFile) return handleMusicXML();
   showError('');
@@ -1700,11 +1824,17 @@ analyzeBtn.addEventListener('click', async () => {
   ['solfegeBtn', 'rhythmBtn'].forEach(id => { $(id).style.display = 'flex'; });
   showTab('overview', document.querySelector('.tab-btn'));
 
-  const timer = setTimeout(() => { $('loadingSub').textContent = 'Step 2 of 2: Writing practice guide...'; }, 15000);
+  // Multi-step loading progress
+  setLoadingStep('step-upload');
+  setTimeout(() => setLoadingStep('step-preprocess'), 1500);
+  setTimeout(() => setLoadingStep('step-analyze'), 3500);
+  const timer = setTimeout(() => setLoadingStep('step-validate'), 18000);
 
   try {
     const data = await callAPI([], 'analyze');
     clearTimeout(timer);
+    setLoadingStep('step-done');
+
     if (data.structured) {
       currentAnalysis = data.structured;
       renderStructured(data.structured);
@@ -1717,15 +1847,38 @@ analyzeBtn.addEventListener('click', async () => {
     chatHistory.push({ role: 'user', parts: [{ text: 'Analyze for ' + selectedPart }] });
     chatHistory.push({ role: 'model', parts: [{ text: data.text || JSON.stringify(data.structured) }] });
     saveToHistory(data.structured || data.text);
-    $('loading').classList.remove('show');
-    $('results').classList.add('show');
-    $('chatSection').style.display = 'block';
-    $('exportBtn').style.display = 'block';
+    setTimeout(() => {
+      $('loading').classList.remove('show');
+      $('results').classList.add('show');
+      $('chatSection').style.display = 'block';
+      $('exportBtn').style.display = 'block';
+    }, 600);
     analyzeBtn.disabled = false;
-    setTimeout(animateInfoCards, 100);
-    setTimeout(animateDiffBars, 300);
+    setTimeout(animateInfoCards, 700);
+    setTimeout(animateDiffBars, 900);
   } catch (err) {
     clearTimeout(timer);
+
+    // Auto-retry for retryable errors
+    let retryable = false;
+    try {
+      const errData = JSON.parse(err.message);
+      if (errData.retryable) retryable = true;
+    } catch (e) {
+      if (err.message?.includes('busy') || err.message?.includes('retry') || err.message?.includes('overloaded')) retryable = true;
+    }
+
+    if (retryable && !analyzeBtn._retried) {
+      analyzeBtn._retried = true;
+      $('loadingSub').textContent = 'Retrying in 5 seconds...';
+      setTimeout(() => {
+        analyzeBtn._retried = false;
+        analyzeBtn.click();
+      }, 5000);
+      return;
+    }
+
+    analyzeBtn._retried = false;
     $('loading').classList.remove('show');
     showError(err.message);
     analyzeBtn.disabled = false;
@@ -1753,6 +1906,7 @@ async function handleMusicXML() {
       practiceData = data.structured.measures.map(m => ({ num: String(m.num), notes: m.notes || [], solfege: m.solfege || [], lyrics: m.lyrics || '', confidence: 'high', disagreement: false }));
       enablePracticeMode();
       $('transposeBtn').style.display = 'inline-flex';
+      if ($('exportMusicXMLBtn')) $('exportMusicXMLBtn').style.display = 'inline-flex';
       if (typeof updateChordAnalysisVisibility === 'function') updateChordAnalysisVisibility();
       if (typeof checkPerformanceOrderVisibility === 'function') checkPerformanceOrderVisibility();
     }
@@ -1769,6 +1923,44 @@ async function handleMusicXML() {
 // RENDER STRUCTURED RESULTS
 // ═══════════════════════════════════════════════════════════════
 function renderStructured(s) {
+  // ═══ CONFIDENCE METER ═══
+  const confidenceScore = s._confidenceScore || 0;
+  const circumference = 2 * Math.PI * 34;
+  const offset = circumference * (1 - confidenceScore / 100);
+  const meterColor = confidenceScore >= 75 ? 'var(--success)' : confidenceScore >= 50 ? 'var(--gold)' : 'var(--error)';
+  const meterLabel = confidenceScore >= 75 ? 'High Confidence' : confidenceScore >= 50 ? 'Moderate Confidence' : 'Low Confidence';
+
+  const factors = [];
+  if (s._selfConsistency?.keysAgree) factors.push('Key agreed');
+  if (s._selfConsistency?.pitchAgree) factors.push('Pitch agreed');
+  if (s._dbMatch) factors.push('DB match');
+  if (s._imageQuality?.tier === 'good') factors.push('Good image');
+  else if (s._imageQuality?.tier === 'poor') factors.push('Poor image');
+
+  let meterHtml = `<div class="confidence-meter animate-in">
+    <div class="confidence-ring">
+      <svg width="80" height="80" viewBox="0 0 80 80">
+        <circle class="confidence-ring-bg" cx="40" cy="40" r="34"/>
+        <circle class="confidence-ring-fill" cx="40" cy="40" r="34"
+          stroke="${meterColor}" stroke-dasharray="${circumference}" stroke-dashoffset="${offset}"/>
+      </svg>
+      <div class="confidence-ring-score">${confidenceScore}</div>
+    </div>
+    <div class="confidence-details">
+      <div class="confidence-label">${meterLabel}</div>
+      <div class="confidence-text">Analysis confidence based on AI consensus, image quality${s._dbMatch ? ', and database verification' : ''}.</div>
+      <div class="confidence-factors">${factors.map(f => `<span class="confidence-factor">${esc(f)}</span>`).join('')}</div>
+    </div>
+  </div>`;
+
+  // Image quality warning
+  if (s._imageQuality?.advice) {
+    meterHtml += `<div class="quality-warning animate-in" style="animation-delay:0.1s;">
+      <span class="quality-warning-icon">&#x26A0;</span>
+      <span>${esc(s._imageQuality.advice)}</span>
+    </div>`;
+  }
+
   const cards = [
     { label: 'KEY SIGNATURE', value: s.keySignature, warning: s.keyWarning },
     { label: 'TIME SIGNATURE', value: s.timeSignature },
@@ -1777,8 +1969,8 @@ function renderStructured(s) {
     { label: 'STARTING PITCH', value: s.startingPitch },
   ].filter(c => c.value && c.value !== 'Not determined');
 
-  $('infoGrid').innerHTML = cards.map(c => `
-    <div class="info-card">
+  $('infoGrid').innerHTML = meterHtml + cards.map((c, i) => `
+    <div class="info-card animate-in" style="animation-delay:${0.1 + i * 0.08}s">
       <button class="edit-btn" onclick="editCard(this)">&#9998;</button>
       <div class="info-label">${esc(c.label)}</div>
       <div class="info-value">${esc(c.value)}</div>
@@ -2661,9 +2853,16 @@ async function callAPI(messages, mode) {
   if (!res.ok) {
     const t = await res.text();
     let msg = `Error (${res.status})`;
-    try { const d = JSON.parse(t); if (d.error) msg = d.error; } catch (e) {}
-    if (res.status === 429) msg = 'AI is busy. Please wait 30 seconds.';
-    throw new Error(msg);
+    let retryable = false;
+    try {
+      const d = JSON.parse(t);
+      if (d.error) msg = d.error;
+      if (d.retryable) retryable = true;
+    } catch (e) {}
+    if (res.status === 429) { msg = 'AI is busy — retrying automatically...'; retryable = true; }
+    const err = new Error(msg);
+    err.retryable = retryable;
+    throw err;
   }
   return await res.json();
 }
@@ -3971,6 +4170,192 @@ function exportAsPDF() {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// MUSICXML EXPORT
+// ═══════════════════════════════════════════════════════════════
+async function exportMusicXML() {
+  if (!practiceData?.length && !_solfegeStructured?.measures?.length) {
+    showToast('Generate solfege first to export MusicXML', 'info');
+    return;
+  }
+  const measures = _solfegeStructured?.measures || practiceData;
+  const analysis = currentAnalysis || {};
+
+  try {
+    showToast('Generating MusicXML...', 'info');
+    const resp = await fetch('/api/export-musicxml', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        measures,
+        keySignature: analysis.keySignature || 'C major',
+        timeSignature: analysis.timeSignature || '4/4',
+        title: analysis.pieceTitle || 'Solfai Export',
+        composer: analysis.composerName || '',
+        part: selectedPart,
+      }),
+    });
+    if (!resp.ok) throw new Error('Export failed');
+
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${(analysis.pieceTitle || 'solfai-export').replace(/[^a-zA-Z0-9-_]/g, '_')}.musicxml`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast('MusicXML downloaded! Open in MuseScore, Finale, or Sibelius.', 'success');
+  } catch (err) {
+    showToast('MusicXML export failed: ' + err.message, 'error');
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// CONTEXTUAL AI PRACTICE COACH
+// ═══════════════════════════════════════════════════════════════
+async function getPracticeCoach() {
+  const measures = _solfegeStructured?.measures || practiceData;
+  if (!measures?.length) {
+    showToast('Analyze and generate solfege first', 'info');
+    return;
+  }
+
+  const analysis = currentAnalysis || {};
+
+  // Get evaluation results from localStorage if available
+  let evaluationResults = [];
+  try {
+    const stored = localStorage.getItem('solfai-eval-results');
+    if (stored) evaluationResults = JSON.parse(stored);
+  } catch (e) {}
+
+  showToast('Getting coaching tips...', 'info');
+  try {
+    const resp = await fetch('/api/practice-coach', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        measures: measures.slice(0, 20),
+        keySignature: analysis.keySignature,
+        part: selectedPart,
+        evaluationResults,
+      }),
+    });
+    if (!resp.ok) throw new Error('Coach request failed');
+    const data = await resp.json();
+
+    if (data.tips?.length) {
+      const coachHtml = `
+        <div style="padding:22px;background:var(--card);border-radius:var(--radius-md);box-shadow:var(--shadow-card);margin-bottom:20px;">
+          <div style="font-size:0.65rem;text-transform:uppercase;letter-spacing:3px;color:var(--gold);margin-bottom:14px;font-weight:500;">Practice Coach</div>
+          ${data.tips.map((tip, i) => `<div class="tip-card animate-in" style="animation-delay:${i * 0.1}s"><div class="tip-num">${i + 1}</div><div class="tip-text">${esc(tip)}</div></div>`).join('')}
+          ${data.weakMeasures?.length ? `<div style="margin-top:12px;font-size:0.72rem;color:var(--text2);">Focus areas: measures ${data.weakMeasures.map(w => w.measure).join(', ')}</div>` : ''}
+        </div>`;
+
+      // Insert at top of results
+      const resultsEl = $('results');
+      const existing = resultsEl.querySelector('.practice-coach-result');
+      if (existing) existing.remove();
+      const wrapper = document.createElement('div');
+      wrapper.className = 'practice-coach-result';
+      wrapper.innerHTML = coachHtml;
+      resultsEl.insertBefore(wrapper, resultsEl.firstChild.nextSibling);
+      showToast('Coach tips ready!', 'success');
+    }
+  } catch (err) {
+    showToast('Coach tips failed: ' + err.message, 'error');
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SATB ENSEMBLE VISUALIZATION
+// ═══════════════════════════════════════════════════════════════
+function showEnsembleView() {
+  if (!practiceData?.length) { showToast('Generate solfege first', 'info'); return; }
+
+  const colors = { Soprano: '#4fc3f7', Alto: '#81c784', Tenor: '#ffb74d', Bass: '#e57373' };
+  const measures = practiceData;
+  const partColor = colors[selectedPart] || colors.Soprano;
+
+  // Build SVG visualization
+  const svgWidth = Math.max(600, measures.length * 60);
+  const svgHeight = 200;
+  const yMin = 48; // C3
+  const yMax = 84; // C6
+  const yRange = yMax - yMin;
+
+  let pathD = '';
+  let noteCircles = '';
+  let labels = '';
+  let prevX = null, prevY = null;
+
+  measures.forEach((m, mi) => {
+    const notes = m.notes || [];
+    notes.forEach((n, ni) => {
+      if (n === '[?]' || n === 'rest') return;
+      const midi = getMidiNote ? getMidiNote(n) : null;
+      if (midi === null) return;
+
+      const x = 40 + mi * 60 + ni * (50 / Math.max(notes.length, 1));
+      const y = svgHeight - 20 - ((midi - yMin) / yRange) * (svgHeight - 40);
+
+      if (prevX !== null) pathD += ` L${x},${y}`;
+      else pathD = `M${x},${y}`;
+
+      noteCircles += `<circle cx="${x}" cy="${y}" r="4" fill="${partColor}" opacity="0.9"><title>${n}</title></circle>`;
+      prevX = x; prevY = y;
+    });
+
+    // Measure line
+    const mx = 40 + (mi + 1) * 60 - 10;
+    labels += `<line x1="${mx}" y1="10" x2="${mx}" y2="${svgHeight - 10}" stroke="var(--border)" stroke-width="0.5" stroke-dasharray="4"/>`;
+    labels += `<text x="${40 + mi * 60 + 20}" y="${svgHeight - 4}" fill="var(--muted)" font-size="9" text-anchor="middle">${m.num || mi + 1}</text>`;
+  });
+
+  // Staff lines (approximate)
+  for (let line = 0; line < 5; line++) {
+    const y = 30 + line * ((svgHeight - 60) / 4);
+    labels += `<line x1="0" y1="${y}" x2="${svgWidth}" y2="${y}" stroke="var(--border)" stroke-width="0.3" opacity="0.5"/>`;
+  }
+
+  const html = `
+    <div style="padding:22px;background:var(--card);border-radius:var(--radius-md);box-shadow:var(--shadow-card);margin-bottom:20px;overflow-x:auto;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+        <div style="font-size:0.65rem;text-transform:uppercase;letter-spacing:3px;color:var(--gold);font-weight:500;">Ensemble View - ${esc(selectedPart)}</div>
+        <div style="display:flex;gap:12px;">
+          ${Object.entries(colors).map(([p, c]) => `<span style="font-size:0.68rem;color:${c};display:flex;align-items:center;gap:4px;"><span style="width:8px;height:8px;border-radius:50%;background:${c};display:inline-block;"></span>${p}</span>`).join('')}
+        </div>
+      </div>
+      <svg width="${svgWidth}" height="${svgHeight}" viewBox="0 0 ${svgWidth} ${svgHeight}" style="width:100%;height:auto;">
+        ${labels}
+        <path d="${pathD}" fill="none" stroke="${partColor}" stroke-width="2" opacity="0.6"/>
+        ${noteCircles}
+      </svg>
+    </div>`;
+
+  const existing = document.querySelector('.ensemble-view-result');
+  if (existing) { existing.remove(); return; }
+  const wrapper = document.createElement('div');
+  wrapper.className = 'ensemble-view-result';
+  wrapper.innerHTML = html;
+  $('solfegeOutput').parentElement.insertBefore(wrapper, $('solfegeOutput'));
+}
+
+// Helper: get MIDI note number from note name (e.g., "C4" -> 60)
+function getMidiNote(noteStr) {
+  const match = noteStr.match(/^([A-G])(#{0,2}|b{0,2})(\d)$/);
+  if (!match) return null;
+  const [, letter, acc, octStr] = match;
+  const oct = parseInt(octStr);
+  const semitones = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+  let midi = (oct + 1) * 12 + (semitones[letter] || 0);
+  if (acc === '#') midi += 1;
+  else if (acc === '##') midi += 2;
+  else if (acc === 'b') midi -= 1;
+  else if (acc === 'bb') midi -= 2;
+  return midi;
+}
+
+// ═══════════════════════════════════════════════════════════════
 // PLAY FULL PIECE (bouncing ball note follower)
 // ═══════════════════════════════════════════════════════════════
 let _fullPiecePlaying = false;
@@ -4672,6 +5057,7 @@ loadSolfege = async function() {
     $('transposeBtn').style.display = 'inline-flex';
     $('sectionBreakdownBtn').style.display = 'inline-flex';
     $('capoBtn').style.display = 'inline-flex';
+    if ($('exportMusicXMLBtn')) $('exportMusicXMLBtn').style.display = 'inline-flex';
     updateChordAnalysisVisibility();
     checkPerformanceOrderVisibility();
   }

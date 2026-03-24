@@ -897,6 +897,54 @@ function validateAndFixNotes(measures, tonic, voicePart) {
   return corrections;
 }
 
+// ─── Duration-Aware Validation ───────────────────────────
+// Checks if note durations in each measure sum to the time signature
+const DURATION_VALUES = {
+  'whole': 4, 'half': 2, 'dotted half': 3, 'quarter': 1, 'dotted quarter': 1.5,
+  'eighth': 0.5, 'dotted eighth': 0.75, 'sixteenth': 0.25, 'dotted sixteenth': 0.375,
+  'half note': 2, 'quarter note': 1, 'eighth note': 0.5, 'sixteenth note': 0.25,
+  'w': 4, 'h': 2, 'q': 1, 'e': 0.5, 's': 0.25,
+  '1': 4, '2': 2, '4': 1, '8': 0.5, '16': 0.25,
+};
+
+function parseDurationBeats(durStr) {
+  if (!durStr) return null;
+  const lower = durStr.toLowerCase().trim();
+  return DURATION_VALUES[lower] || null;
+}
+
+function getBeatsPerMeasure(timeSig) {
+  if (!timeSig) return 4;
+  const parts = timeSig.split('/');
+  if (parts.length !== 2) return 4;
+  const num = parseInt(parts[0]);
+  const denom = parseInt(parts[1]);
+  if (isNaN(num) || isNaN(denom)) return 4;
+  return num * (4 / denom);
+}
+
+function validateDurations(measures, timeSig) {
+  const expectedBeats = getBeatsPerMeasure(timeSig);
+  let warnings = 0;
+
+  for (const m of measures) {
+    if (!m.durations || !m.durations.length) continue;
+
+    let totalBeats = 0;
+    for (const dur of m.durations) {
+      const beats = parseDurationBeats(dur);
+      if (beats !== null) totalBeats += beats;
+    }
+
+    if (totalBeats > 0 && Math.abs(totalBeats - expectedBeats) > 0.25) {
+      m.durationWarning = `Durations sum to ${totalBeats} beats, expected ${expectedBeats} in ${timeSig}`;
+      warnings++;
+    }
+  }
+
+  return warnings;
+}
+
 // ─── Starting Pitch Validation ────────────────────────────
 // Cross-check the starting pitch against the key signature
 function validateStartingPitch(pitch, tonic, voicePart) {
@@ -923,6 +971,91 @@ function validateStartingPitch(pitch, tonic, voicePart) {
 
   // Correct enharmonic spelling for key
   return correctEnharmonicForKey(pitch, tonic);
+}
+
+// ─── Image Quality Assessment ─────────────────────────────
+// Analyzes image quality before sending to Gemini: resolution, contrast, sharpness
+async function assessImageQuality(base64Data) {
+  try {
+    const buf = Buffer.from(base64Data, 'base64');
+    const meta = await sharp(buf).metadata();
+    const { width, height, channels, size } = meta;
+
+    // Resolution score (0-100): minimum 600px wide for readable music
+    const minDim = Math.min(width, height);
+    const resolutionScore = Math.min(100, Math.round((minDim / 1200) * 100));
+
+    // Contrast/sharpness via stats on grayscale version
+    const stats = await sharp(buf).grayscale().stats();
+    const channel = stats.channels[0];
+
+    // Standard deviation of pixel values — higher = better contrast for sheet music
+    // Sheet music typically has high contrast (black on white), stdev should be > 60
+    const contrastScore = Math.min(100, Math.round((channel.stdev / 80) * 100));
+
+    // Check if image is mostly white (expected for sheet music) or dark (phone photo in low light)
+    const meanBrightness = channel.mean;
+    const brightnessScore = meanBrightness > 200 ? 100 :
+      meanBrightness > 150 ? 80 :
+      meanBrightness > 100 ? 50 : 20;
+
+    // File size check — very small files are likely low quality
+    const sizeScore = size > 500000 ? 100 : size > 100000 ? 70 : size > 30000 ? 40 : 15;
+
+    // Composite score
+    const overall = Math.round(
+      resolutionScore * 0.35 +
+      contrastScore * 0.30 +
+      brightnessScore * 0.20 +
+      sizeScore * 0.15
+    );
+
+    // Determine quality tier and advice
+    let tier, advice;
+    if (overall >= 75) {
+      tier = 'good';
+      advice = null;
+    } else if (overall >= 50) {
+      tier = 'fair';
+      advice = 'Image quality is moderate. For best results, use a flatbed scanner or a well-lit, straight-on photo.';
+    } else {
+      tier = 'poor';
+      advice = 'Image quality is low. Try: (1) scanning the sheet music with a flatbed scanner, (2) taking a photo in bright, even lighting without shadows, (3) using a higher resolution camera.';
+    }
+
+    // Detect likely phone photo vs scan
+    const isPhonePhoto = meanBrightness < 180 && channel.stdev < 70;
+
+    return {
+      width, height,
+      resolution: resolutionScore,
+      contrast: contrastScore,
+      brightness: brightnessScore,
+      overall,
+      tier,
+      advice,
+      isPhonePhoto,
+      needsEnhancement: overall < 70,
+    };
+  } catch (e) {
+    console.warn('[Solfai] Image quality assessment failed:', e.message);
+    return { overall: 50, tier: 'unknown', advice: null, isPhonePhoto: false, needsEnhancement: false };
+  }
+}
+
+// ─── Adaptive Preprocessing Strategy ─────────────────────
+// Selects the best preprocessing mode based on image characteristics
+function selectPreprocessingStrategy(quality) {
+  if (quality.isPhonePhoto) {
+    return { primary: 'high_contrast', secondary: 'binarize', weight: 'high_contrast' };
+  }
+  if (quality.contrast < 40) {
+    return { primary: 'high_contrast', secondary: 'binarize', weight: 'high_contrast' };
+  }
+  if (quality.overall >= 80) {
+    return { primary: 'full', secondary: 'full', weight: 'full' };
+  }
+  return { primary: 'binarize', secondary: 'high_contrast', weight: 'binarize' };
 }
 
 // ─── Image preprocessing with sharp ───────────────────────
@@ -1214,19 +1347,43 @@ app.post('/api/analyze', async (req, res) => {
     }
   } catch (err) {
     console.error('[Solfai] Handler error:', err.message);
-    let userError = err.message || 'Internal server error';
-    if (userError.includes('429') || userError.toLowerCase().includes('quota') || userError.toLowerCase().includes('rate limit')) {
-      userError = 'The AI is busy right now. Please wait 30 seconds and try again.';
-    } else if (userError.includes('503') || userError.toLowerCase().includes('overloaded')) {
+    const msg = (err.message || '').toLowerCase();
+    let userError, errorCode, retryable;
+
+    if (msg.includes('429') || msg.includes('quota') || msg.includes('rate limit')) {
+      userError = 'The AI is busy right now. Your request will be automatically retried.';
+      errorCode = 'RATE_LIMITED';
+      retryable = true;
+    } else if (msg.includes('503') || msg.includes('overloaded') || msg.includes('unavailable')) {
       userError = 'The AI service is temporarily overloaded. Please try again in a minute.';
-    } else if (userError.includes('401') || userError.toLowerCase().includes('api key')) {
-      userError = 'API key error. Please contact support.';
-    } else if (userError.toLowerCase().includes('no image') || userError.toLowerCase().includes('no response')) {
-      userError = 'The AI could not process this image. Please try: (1) a clearer photo with good lighting, (2) a higher resolution scan, or (3) a different file format (JPG/PNG work best).';
-    } else if (userError.toLowerCase().includes('invalid') || userError.toLowerCase().includes('could not')) {
-      userError = 'Processing failed. Try re-uploading the image or using a different file.';
+      errorCode = 'SERVICE_OVERLOADED';
+      retryable = true;
+    } else if (msg.includes('401') || msg.includes('api key') || msg.includes('403')) {
+      userError = 'API authentication error. Please contact support.';
+      errorCode = 'AUTH_ERROR';
+      retryable = false;
+    } else if (msg.includes('blocked')) {
+      userError = 'The AI flagged this image. Please use a clean, unmodified sheet music scan without annotations or markings.';
+      errorCode = 'CONTENT_BLOCKED';
+      retryable = false;
+    } else if (msg.includes('empty response') || msg.includes('no text content') || msg.includes('no candidates')) {
+      userError = "The AI couldn't read this image clearly. Try: (1) a higher resolution scan (300+ DPI), (2) better lighting without shadows, (3) cropping to just the sheet music.";
+      errorCode = 'EMPTY_RESPONSE';
+      retryable = true;
+    } else if (msg.includes('all ai extraction attempts failed')) {
+      userError = 'All analysis attempts failed. This usually means the image is too low quality or the AI service is down. Try a clearer scan or wait a few minutes.';
+      errorCode = 'ALL_FAILED';
+      retryable = true;
+    } else if (msg.includes('no image')) {
+      userError = 'No image was received. Please upload a photo or PDF of sheet music.';
+      errorCode = 'NO_IMAGE';
+      retryable = false;
+    } else {
+      userError = 'Analysis failed. Try re-uploading with a higher quality image (JPG or PNG, 300+ DPI).';
+      errorCode = 'UNKNOWN';
+      retryable = true;
     }
-    return res.status(500).json({ error: userError });
+    return res.status(500).json({ error: userError, errorCode, retryable });
   }
 });
 
@@ -1247,6 +1404,30 @@ function handleCorrection(res, body) {
   return res.status(200).json({ ok: true });
 }
 
+// ─── Composite Confidence Score ───────────────────────────
+// Numeric 0-100 score combining consensus agreement, image quality, database match, and call success rate
+function calculateCompositeConfidence({ keyAgreement, pitchAgreement, imageQuality, dbMatch, successCount, totalCalls }) {
+  let score = 0;
+
+  // Consensus agreement (40 points max)
+  if (keyAgreement) score += 20;
+  else score += 8;
+  if (pitchAgreement) score += 20;
+  else score += 8;
+
+  // Image quality (25 points max)
+  score += Math.round((imageQuality / 100) * 25);
+
+  // Database match bonus (15 points)
+  if (dbMatch) score += 15;
+
+  // API call success rate (20 points max)
+  const successRate = totalCalls > 0 ? successCount / totalCalls : 0;
+  score += Math.round(successRate * 20);
+
+  return Math.min(100, Math.max(0, score));
+}
+
 // ═══════════════════════════════════════════════════════════
 // ANALYZE — 5-way consensus + dedicated key/pitch extraction
 // ═══════════════════════════════════════════════════════════
@@ -1256,13 +1437,25 @@ async function handleAnalyze(res, apiKey, imageParts, part, rawBase64, pdfPages)
   const corrections = loadCorrections();
   const cached = corrections[imgHash];
 
-  // Preprocess images in parallel
+  // ═══ IMAGE QUALITY PRE-CHECK ═══
+  const firstJpegForQuality = imageParts.find(p => p.inlineData?.mimeType === 'image/jpeg');
+  let imageQuality = { overall: 75, tier: 'good', advice: null, isPhonePhoto: false, needsEnhancement: false };
+  if (firstJpegForQuality) {
+    imageQuality = await assessImageQuality(firstJpegForQuality.inlineData.data);
+    console.log(`[Solfai] Image quality: ${imageQuality.overall}/100 (${imageQuality.tier}), phone=${imageQuality.isPhonePhoto}`);
+  }
+
+  // ═══ ADAPTIVE PREPROCESSING ═══
+  const strategy = selectPreprocessingStrategy(imageQuality);
+  const preprocessMode = imageQuality.needsEnhancement ? strategy.primary : 'full';
+
+  // Preprocess images in parallel using adaptive strategy
   const processedParts = await Promise.all(
     imageParts.slice(0, 5).map(async (p) => {
       if (p.inlineData?.mimeType === 'application/pdf') return p;
       if (p.inlineData?.mimeType === 'image/jpeg') {
         try {
-          const enhanced = await preprocessForGemini(p.inlineData.data, 'full');
+          const enhanced = await preprocessForGemini(p.inlineData.data, preprocessMode);
           return { inlineData: { mimeType: 'image/jpeg', data: enhanced } };
         } catch (e) { return p; }
       }
@@ -1425,16 +1618,21 @@ For SATB: Soprano=top treble staff stems up, Alto=bottom treble stems down, Teno
   }
   console.log(`[Solfai] ${successCount}/${results.length} Gemini calls succeeded`);
 
-  // Parse key signature votes (indices 0-3: 2 Pro + 1 Flash + 1 annotated Pro)
+  // Parse results — indices match the 6-call allPromises array:
+  //   0: key sig Pro (cropped)
+  //   1: key sig Flash (full)
+  //   2: full extraction Pro
+  //   3: full extraction Flash
+  //   4: pitch Pro (cropped)
+  //   5: pitch Flash (full)
+
+  // Parse key signature votes (indices 0-1)
   const keyVotes = [];
-  for (let i = 0; i < 4; i++) {
+  for (const [i, weight] of [[0, WEIGHT_PRO], [1, WEIGHT_FLASH]]) {
     if (!results[i]) continue;
     try {
       const ks = JSON.parse(results[i]);
-      const flatCount = Number(ks.flat_count) || 0;
-      const sharpCount = Number(ks.sharp_count) || 0;
-      const weight = i === 2 ? WEIGHT_FLASH : WEIGHT_PRO;
-      keyVotes.push({ flatCount, sharpCount, weight, confidence: ks.confidence });
+      keyVotes.push({ flatCount: Number(ks.flat_count) || 0, sharpCount: Number(ks.sharp_count) || 0, weight, confidence: ks.confidence });
     } catch (e) {
       console.warn(`[Solfai] Key sig read ${i + 1} parse failed`);
     }
@@ -1448,28 +1646,27 @@ For SATB: Soprano=top treble staff stems up, Alto=bottom treble stems down, Teno
 
   console.log(`[Solfai] Key votes: ${keyVotes.map(v => `${v.flatCount}b/${v.sharpCount}s`).join(', ')} → ${votedFlats}b/${votedSharps}s`);
 
-  // Parse full extraction results (indices 4-6)
+  // Parse full extraction results (indices 2-3)
   const fullExtractions = [];
-  for (let i = 4; i < 7; i++) {
+  for (const [i, weight] of [[2, WEIGHT_PRO], [3, WEIGHT_FLASH]]) {
     if (!results[i]) { fullExtractions.push({}); continue; }
     try {
       fullExtractions.push(JSON.parse(results[i]));
     } catch (e) {
-      console.warn(`[Solfai] Full extraction ${i - 3} parse failed`);
+      console.warn(`[Solfai] Full extraction ${i - 1} parse failed`);
       fullExtractions.push({});
     }
   }
 
-  // Parse starting pitch votes (indices 7-10: 2 Pro + 1 Flash + 1 zoomed Pro)
+  // Parse starting pitch votes (indices 4-5)
   const pitchVotes = [];
-  for (let i = 7; i < 11; i++) {
+  for (const [i, weight] of [[4, WEIGHT_PRO], [5, WEIGHT_FLASH]]) {
     if (!results[i]) continue;
     try {
       const pd = JSON.parse(results[i]);
-      const weight = i === 9 ? WEIGHT_FLASH : WEIGHT_PRO;
       pitchVotes.push({ value: pd.pitch, weight, lineOrSpace: pd.line_or_space, whichNum: pd.which_line_or_space });
     } catch (e) {
-      console.warn(`[Solfai] Pitch read ${i - 6} parse failed`);
+      console.warn(`[Solfai] Pitch read ${i - 3} parse failed`);
     }
   }
 
@@ -1550,6 +1747,36 @@ For SATB: Soprano=top treble staff stems up, Alto=bottom treble stems down, Teno
       finalKey = dbMatch.key;
       tonic = finalKey.split(' ')[0];
       dbOverrideApplied = true;
+    }
+  }
+
+  // ═══ CONFIDENCE-WEIGHTED RETRY ═══
+  // If key or pitch confidence is low, retry with a specialized prompt
+  const keyConfidenceRatio = keyVotes.length > 0
+    ? keyVotes.filter(v => v.flatCount === votedFlats && v.sharpCount === votedSharps).length / keyVotes.length
+    : 0;
+  const pitchConfidenceRatio = pitchGroups.length > 0
+    ? pitchGroups[0].totalWeight / pitchVotes.reduce((s, v) => s + v.weight, 0)
+    : 0;
+
+  // Retry key if < 70% agreement and we have image data
+  if (keyConfidenceRatio < 0.7 && firstJpeg) {
+    console.log(`[Solfai] Low key confidence (${Math.round(keyConfidenceRatio * 100)}%), retrying with high_contrast...`);
+    try {
+      const hcData = await preprocessForGemini(firstJpeg.inlineData.data, 'high_contrast');
+      const retryResult = await callGemini(apiKey, keySigPrompt,
+        [{ text: 'CRITICAL RETRY: Count the key signature accidentals very carefully. This is a tie-breaker read.' },
+         { inlineData: { mimeType: 'image/jpeg', data: hcData } }],
+        { temperature: 0, maxOutputTokens: 128, responseSchema: KEY_SIG_SCHEMA, thinkingBudget: 6000 }
+      );
+      const retryKs = JSON.parse(retryResult);
+      keyVotes.push({ flatCount: Number(retryKs.flat_count) || 0, sharpCount: Number(retryKs.sharp_count) || 0, weight: WEIGHT_PRO, confidence: retryKs.confidence });
+      // Re-vote with the extra data
+      const reFlatWinner = weightedVote(keyVotes.map(v => ({ value: v.flatCount, weight: v.weight })));
+      const reSharpWinner = weightedVote(keyVotes.map(v => ({ value: v.sharpCount, weight: v.weight })));
+      console.log(`[Solfai] Key retry vote: ${Number(reFlatWinner) || 0}b/${Number(reSharpWinner) || 0}s`);
+    } catch (e) {
+      console.warn('[Solfai] Key retry failed:', e.message);
     }
   }
 
@@ -1716,6 +1943,19 @@ Output ONLY valid JSON.`;
     pieceInfo: analysis.pieceInfo || null,
     pronunciation: analysis.pronunciation || { language: 'English', needsGuide: false, words: [] },
     _imageHash: imgHash,
+    _imageQuality: {
+      score: imageQuality.overall,
+      tier: imageQuality.tier,
+      advice: imageQuality.advice,
+    },
+    _confidenceScore: calculateCompositeConfidence({
+      keyAgreement,
+      pitchAgreement,
+      imageQuality: imageQuality.overall,
+      dbMatch: !!dbMatch,
+      successCount,
+      totalCalls: results.length,
+    }),
     _selfConsistency: {
       keysAgree: keyAgreement,
       pitchAgree: pitchAgreement,
@@ -2499,22 +2739,8 @@ app.post('/api/transpose', (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════
-// FEATURE: Duration Validation
+// FEATURE: Duration Validation (uses shared DURATION_VALUES and getBeatsPerMeasure)
 // ═══════════════════════════════════════════════════════════
-
-const DURATION_VALUES = {
-  'whole': 4, 'half': 2, 'quarter': 1, 'eighth': 0.5,
-  'sixteenth': 0.25, '32nd': 0.125, 'dotted whole': 6,
-  'dotted half': 3, 'dotted quarter': 1.5, 'dotted eighth': 0.75,
-  'half triplet': 4 / 3, 'quarter triplet': 2 / 3, 'eighth triplet': 1 / 3,
-};
-
-function getBeatsPerMeasure(timeSig) {
-  if (!timeSig) return 4;
-  const [num, den] = timeSig.split('/').map(Number);
-  if (!num || !den) return 4;
-  return num * (4 / den);
-}
 
 app.post('/api/validate-durations', (req, res) => {
   const { measures, timeSignature } = req.body;
@@ -2531,7 +2757,7 @@ app.post('/api/validate-durations', (req, res) => {
     let totalBeats = 0;
 
     for (const d of durations) {
-      const val = typeof d === 'number' ? d : (DURATION_VALUES[d?.toLowerCase()] || 0);
+      const val = typeof d === 'number' ? d : (parseDurationBeats(d) || 0);
       totalBeats += val;
     }
 
@@ -3629,6 +3855,196 @@ self.addEventListener('fetch', (event) => {
   );
 });
   `.trim());
+});
+
+// ═══════════════════════════════════════════════════════════
+// FEATURE: MusicXML Export
+// ═══════════════════════════════════════════════════════════
+app.post('/api/export-musicxml', (req, res) => {
+  const { measures, keySignature, timeSignature, title, composer, part } = req.body;
+  if (!measures?.length) return res.status(400).json({ error: 'No measures provided' });
+
+  const key = keySignature || 'C major';
+  const timeSig = timeSignature || '4/4';
+  const [timeNum, timeDen] = timeSig.split('/').map(Number);
+  const tonic = key.split(' ')[0];
+
+  // Calculate MusicXML key fifths from key signature
+  const FIFTHS_MAP = {
+    'C': 0, 'G': 1, 'D': 2, 'A': 3, 'E': 4, 'B': 5, 'F#': 6, 'C#': 7,
+    'F': -1, 'Bb': -2, 'Eb': -3, 'Ab': -4, 'Db': -5, 'Gb': -6, 'Cb': -7,
+  };
+  const isMinor = key.toLowerCase().includes('minor');
+  const fifths = FIFTHS_MAP[tonic] ?? 0;
+
+  // Map note name to MusicXML step/alter/octave
+  function noteToXML(noteStr) {
+    const parsed = Note.get(noteStr);
+    if (!parsed.name) return null;
+    const step = parsed.letter;
+    const octave = parsed.oct ?? 4;
+    let alter = 0;
+    if (parsed.acc === '#') alter = 1;
+    else if (parsed.acc === '##') alter = 2;
+    else if (parsed.acc === 'b') alter = -1;
+    else if (parsed.acc === 'bb') alter = -2;
+    return { step, alter, octave };
+  }
+
+  // Duration mapping (quarter note = 1 division)
+  const DURATION_MAP = {
+    'whole': 4, 'half': 2, 'dotted half': 3, 'quarter': 1, 'dotted quarter': 1.5,
+    'eighth': 0.5, 'sixteenth': 0.25,
+  };
+
+  let measureXML = '';
+  for (let i = 0; i < measures.length; i++) {
+    const m = measures[i];
+    const notes = m.notes || [];
+    const durations = m.durations || [];
+
+    let noteXML = '';
+    for (let j = 0; j < notes.length; j++) {
+      if (notes[j] === '[?]' || notes[j] === 'rest') {
+        const dur = durations[j] ? (parseDurationBeats(durations[j]) || 1) : 1;
+        noteXML += `      <note><rest/><duration>${dur}</duration><type>quarter</type></note>\n`;
+        continue;
+      }
+      const xml = noteToXML(notes[j]);
+      if (!xml) continue;
+      const dur = durations[j] ? (parseDurationBeats(durations[j]) || 1) : 1;
+      const type = dur >= 4 ? 'whole' : dur >= 2 ? 'half' : dur >= 1 ? 'quarter' : dur >= 0.5 ? 'eighth' : 'sixteenth';
+      noteXML += `      <note>\n        <pitch><step>${xml.step}</step>${xml.alter ? `<alter>${xml.alter}</alter>` : ''}<octave>${xml.octave}</octave></pitch>\n        <duration>${dur}</duration>\n        <type>${type}</type>\n      </note>\n`;
+    }
+
+    // If no notes parsed, add a whole rest
+    if (!noteXML) {
+      noteXML = `      <note><rest/><duration>${timeNum}</duration><type>whole</type></note>\n`;
+    }
+
+    measureXML += `    <measure number="${i + 1}">\n`;
+    if (i === 0) {
+      measureXML += `      <attributes>\n        <divisions>1</divisions>\n        <key><fifths>${fifths}</fifths>${isMinor ? '<mode>minor</mode>' : '<mode>major</mode>'}</key>\n        <time><beats>${timeNum}</beats><beat-type>${timeDen}</beat-type></time>\n        <clef><sign>G</sign><line>2</line></clef>\n      </attributes>\n`;
+    }
+    measureXML += noteXML;
+    measureXML += `    </measure>\n`;
+  }
+
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE score-partwise PUBLIC "-//Recordare//DTD MusicXML 4.0 Partwise//EN" "http://www.musicxml.org/dtds/partwise.dtd">
+<score-partwise version="4.0">
+  <work><work-title>${(title || 'Solfai Export').replace(/[<>&]/g, '')}</work-title></work>
+  <identification>
+    <creator type="composer">${(composer || '').replace(/[<>&]/g, '')}</creator>
+    <encoding><software>Solfai</software><encoding-date>${new Date().toISOString().split('T')[0]}</encoding-date></encoding>
+  </identification>
+  <part-list><score-part id="P1"><part-name>${(part || 'Voice').replace(/[<>&]/g, '')}</part-name></score-part></part-list>
+  <part id="P1">
+${measureXML}  </part>
+</score-partwise>`;
+
+  res.setHeader('Content-Type', 'application/vnd.recordare.musicxml+xml');
+  res.setHeader('Content-Disposition', `attachment; filename="${(title || 'solfai-export').replace(/[^a-zA-Z0-9-_]/g, '_')}.musicxml"`);
+  return res.send(xml);
+});
+
+// ═══════════════════════════════════════════════════════════
+// FEATURE: Contextual AI Practice Coach
+// ═══════════════════════════════════════════════════════════
+app.post('/api/practice-coach', async (req, res) => {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) return res.status(500).json({ error: 'GEMINI_API_KEY not configured' });
+
+  const { measures, keySignature, part, evaluationResults } = req.body;
+  if (!measures?.length) return res.status(400).json({ error: 'No practice data provided' });
+
+  try {
+    const weakMeasures = [];
+    if (evaluationResults) {
+      for (const r of evaluationResults) {
+        if (r.score < 70 || r.issues?.length > 0) {
+          weakMeasures.push({ measure: r.measure, score: r.score, issues: r.issues || [] });
+        }
+      }
+    }
+
+    const prompt = `You are a warm, encouraging choir coach giving specific practice advice.
+The singer is practicing the ${part || 'Soprano'} part in ${keySignature || 'C major'}.
+
+${weakMeasures.length > 0 ? `They struggled with these measures:
+${weakMeasures.map(w => `- Measure ${w.measure}: score ${w.score}/100, issues: ${w.issues.join(', ')}`).join('\n')}` : 'They are starting a new practice session.'}
+
+Give 3-5 short, specific tips. Each tip should be actionable and reference music theory concepts
+(intervals, solfege syllables, breath marks) where helpful. Keep it encouraging — this is a student, not a professional.
+
+Respond as a JSON array of strings. Each string is one tip. Example:
+["Tip 1", "Tip 2", "Tip 3"]`;
+
+    const raw = await callGemini(apiKey, 'You are a choir practice coach.', [{ text: prompt }], {
+      model: GEMINI_FLASH,
+      temperature: 0.7,
+      maxOutputTokens: 1024,
+      thinkingBudget: 0,
+    });
+
+    const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+    const tips = JSON.parse(cleaned);
+
+    return res.json({ tips: Array.isArray(tips) ? tips : [tips], weakMeasures });
+  } catch (err) {
+    console.error('[Solfai] Practice coach error:', err.message);
+    return res.status(500).json({ error: 'Failed to generate coaching tips' });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════
+// FEATURE: Smart Practice Queue
+// ═══════════════════════════════════════════════════════════
+app.post('/api/smart-practice', (req, res) => {
+  const { evaluationHistory, measures, currentMeasure } = req.body;
+  if (!measures?.length) return res.status(400).json({ error: 'No measures provided' });
+
+  // Build a weakness map from evaluation history
+  const weaknessMap = {};
+  if (evaluationHistory?.length) {
+    for (const eval_ of evaluationHistory) {
+      for (const r of (eval_.results || [])) {
+        const key = String(r.measure);
+        if (!weaknessMap[key]) weaknessMap[key] = { totalScore: 0, attempts: 0, lastAttempt: 0, issues: new Set() };
+        weaknessMap[key].totalScore += r.score || 0;
+        weaknessMap[key].attempts += 1;
+        weaknessMap[key].lastAttempt = eval_.timestamp || Date.now();
+        (r.issues || []).forEach(i => weaknessMap[key].issues.add(i));
+      }
+    }
+  }
+
+  // Score each measure: lower = needs more practice
+  const scored = measures.map((m, i) => {
+    const num = String(m.num || i + 1);
+    const weakness = weaknessMap[num];
+    let priority = 50; // default: medium priority
+
+    if (weakness) {
+      const avgScore = weakness.totalScore / weakness.attempts;
+      priority = 100 - avgScore; // lower avg score = higher priority
+
+      // Spaced repetition: recently practiced measures get lower priority
+      const hoursSinceLastAttempt = (Date.now() - weakness.lastAttempt) / (1000 * 60 * 60);
+      if (hoursSinceLastAttempt < 1) priority *= 0.5; // just practiced, lower priority
+      else if (hoursSinceLastAttempt > 24) priority *= 1.3; // long time ago, boost
+    }
+
+    return { measureNum: num, priority: Math.round(priority), avgScore: weakness ? Math.round(weakness.totalScore / weakness.attempts) : null, attempts: weakness?.attempts || 0, issues: weakness ? [...weakness.issues] : [] };
+  });
+
+  // Sort by priority (highest first)
+  scored.sort((a, b) => b.priority - a.priority);
+
+  // Return top 10 measures to practice
+  const queue = scored.slice(0, 10);
+
+  return res.json({ queue, totalMeasures: measures.length, weakMeasureCount: Object.keys(weaknessMap).length });
 });
 
 // ─── Start ────────────────────────────────────────────────
